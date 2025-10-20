@@ -901,13 +901,16 @@ if __name__ == '__main__':
         print("📊 首次运行，正在初始化数据库...")
         init_db()
     
-    print("📊 Dashboard: http://0.0.0.0:8000")
-    print("🔌 API端点: http://0.0.0.0:8000/api/verify")
+    # Railway 需要使用 $PORT 环境变量
+    port = int(os.getenv('PORT', 8000))
+    
+    print(f"📊 Dashboard: http://0.0.0.0:{port}")
+    print(f"🔌 API端点: http://0.0.0.0:{port}/api/verify")
     print("🔑 管理员密码: SW1024sw..")
     print("")
     print("⚠️  按 Ctrl+C 停止服务器")
     print("=" * 60)
     print("")
     
-    app.run(host='0.0.0.0', port=8000, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
 
