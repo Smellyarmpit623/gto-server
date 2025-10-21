@@ -1344,8 +1344,8 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-        db.commit()
-        db.close()
+            db.commit()
+            db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
