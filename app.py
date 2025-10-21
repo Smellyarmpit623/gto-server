@@ -41,6 +41,7 @@ def init_db():
             ggid VARCHAR(100),
             mac_address VARCHAR(100),
             expiry_date TIMESTAMP NOT NULL,
+            stake_level INTEGER DEFAULT 25,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             is_active BOOLEAN DEFAULT TRUE,
@@ -182,11 +183,19 @@ HTML_TEMPLATE = '''
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            overflow-x: auto;
+            display: block;
+        }
+        table thead, table tbody {
+            display: table;
+            width: 100%;
+            table-layout: auto;
         }
         table th, table td {
-            padding: 15px;
+            padding: 12px 10px;
             text-align: left;
             border-bottom: 1px solid #e1e8ed;
+            white-space: nowrap;
         }
         table th {
             background: #f7f9fc;
@@ -196,6 +205,7 @@ HTML_TEMPLATE = '''
             font-size: 0.85em;
         }
         table tr:hover { background: #f7f9fc; }
+        .mac-unbound { color: #999; font-style: italic; }
         .status {
             padding: 6px 12px;
             border-radius: 20px;
@@ -283,6 +293,10 @@ HTML_TEMPLATE = '''
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="stake_level">🎯 Stake Level</label>
+                    <input type="number" id="stake_level" name="stake_level" value="25" min="1" max="100" placeholder="25">
+                </div>
+                <div class="form-group">
                     <label for="notes">📝 备注（可选）</label>
                     <input type="text" id="notes" name="notes" placeholder="备注信息">
                 </div>
@@ -299,6 +313,7 @@ HTML_TEMPLATE = '''
                         <th>邮箱</th>
                         <th>GG ID</th>
                         <th>MAC 地址</th>
+                        <th>SL</th>
                         <th>到期时间</th>
                         <th>状态</th>
                         <th>创建时间</th>
@@ -311,7 +326,14 @@ HTML_TEMPLATE = '''
                         <td>{{ user.id }}</td>
                         <td>{{ user.email }}</td>
                         <td>{{ user.ggid or '-' }}</td>
-                        <td>{{ user.mac_address or '<span style="color:#999;">未绑定</span>' }}</td>
+                        <td>
+                            {% if user.mac_address %}
+                            {{ user.mac_address }}
+                            {% else %}
+                            <span class="mac-unbound">未绑定</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.stake_level or 25 }}</td>
                         <td>{{ user.expiry_date }}</td>
                         <td>
                             {% if user.status == 'valid' %}
@@ -720,7 +742,8 @@ def api_verify():
                 'ggid': license_dict['ggid'],
                 'expiry_date': expiry_utc.isoformat(),
                 'is_active': license_dict['is_active'],
-                'mac_address': license_dict['mac_address']
+                'mac_address': license_dict['mac_address'],
+                'stake_level': license_dict.get('stake_level', 25)
             }
         }), 200
         
@@ -739,6 +762,7 @@ def api_add_user():
         email = data.get('email')
         ggid = data.get('ggid')
         duration = float(data.get('duration', 30))
+        stake_level = int(data.get('stake_level', 25))
         notes = data.get('notes')
         
         if not email:
@@ -752,13 +776,13 @@ def api_add_user():
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            INSERT INTO licenses (email, ggid, expiry_date, notes)
-            VALUES (%s, %s, %s, %s)
-        ''', (email, ggid, expiry_date, notes))
+            INSERT INTO licenses (email, ggid, expiry_date, stake_level, notes)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (email, ggid, expiry_date, stake_level, notes))
         db.commit()
         db.close()
         
-        log_action('添加用户', email, f'有效期: {duration}天')
+        log_action('添加用户', email, f'有效期: {duration}天, SL: {stake_level}')
         
         return jsonify({'success': True})
         
@@ -896,6 +920,26 @@ def init_db_route():
     try:
         init_db()
         return jsonify({'success': True, 'message': '数据库初始化成功！'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/migrate-db')
+def migrate_db_route():
+    """迁移数据库（添加新字段）"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # 添加 stake_level 列（如果不存在）
+        cursor.execute('''
+            ALTER TABLE licenses
+            ADD COLUMN IF NOT EXISTS stake_level INTEGER DEFAULT 25
+        ''')
+        
+        db.commit()
+        db.close()
+        
+        return jsonify({'success': True, 'message': '数据库迁移成功！已添加 stake_level 字段'}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
