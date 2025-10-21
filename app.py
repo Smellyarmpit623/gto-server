@@ -436,7 +436,7 @@ def api_auth():
         }
     }), 200
 
-@app.route('/users/me', methods=['GET', 'OPTIONS'])
+@app.route('/api/users/me', methods=['GET', 'OPTIONS'])
 def users_me():
     """模拟用户信息 - 根据 License Key 动态返回 Stake Level"""
     if request.method == 'OPTIONS':
@@ -488,7 +488,7 @@ def users_me():
         "isPro": True
     }), 200
 
-@app.route('/appconfig.json', methods=['GET', 'OPTIONS'])
+@app.route('/api/appconfig.json', methods=['GET', 'OPTIONS'])
 def appconfig():
     """模拟应用配置 - 完整字段"""
     if request.method == 'OPTIONS':
@@ -1204,8 +1204,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
         
-        db.commit()
-        db.close()
+                db.commit()
+                db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
@@ -1344,8 +1344,8 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-            db.commit()
-            db.close()
+        db.commit()
+        db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
