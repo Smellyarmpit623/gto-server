@@ -1204,8 +1204,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
         
-                db.commit()
-                db.close()
+        db.commit()
+        db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
@@ -1344,8 +1344,8 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-        db.commit()
-        db.close()
+            db.commit()
+            db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
