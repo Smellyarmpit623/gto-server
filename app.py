@@ -20,8 +20,8 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
 CORS(app)
 
-# Socket.IO (自动选择可用的 async_mode)
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Socket.IO (生产环境使用 gevent)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # 管理员密码
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'SW1024sw..')
@@ -1250,7 +1250,7 @@ def init_db_route():
 if __name__ == '__main__':
     print('')
     print('=' * 60)
-    print('🚀 GTO 服务器 - License Key 系统')
+    print('🚀 GTO 服务器 - License Key 系统 (生产模式)')
     print('=' * 60)
     print('')
     print('📡 功能：')
@@ -1263,4 +1263,7 @@ if __name__ == '__main__':
     print('')
     
     port = int(os.getenv('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    
+    # 生产环境使用 gevent，开发环境使用 Werkzeug
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, 
+                 allow_unsafe_werkzeug=True)
