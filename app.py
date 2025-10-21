@@ -20,8 +20,8 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
 CORS(app)
 
-# Socket.IO
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# Socket.IO (自动选择可用的 async_mode)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # 管理员密码
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'SW1024sw..')
@@ -1119,8 +1119,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, notes or None))
         
-        db.commit()
-        db.close()
+                db.commit()
+                db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
