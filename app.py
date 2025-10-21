@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GTO 许可证管理系统 - 整合版
-Dashboard + API + SQLite
+GTO 许可证管理系统 - PostgreSQL 版本
+Dashboard + API + PostgreSQL
 """
 
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 from datetime import datetime, timezone, timedelta
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import os
 
 app = Flask(__name__)
@@ -15,92 +17,47 @@ app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz'
 # 管理员密码
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'SW1024sw..')
 
-# 检测数据库类型
+# PostgreSQL 数据库 URL
 DATABASE_URL = os.getenv('DATABASE_URL')
-USE_POSTGRES = DATABASE_URL is not None
 
-if USE_POSTGRES:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    print("🐘 使用 PostgreSQL 数据库")
-else:
-    import sqlite3
-    DB_FILE = 'licenses.db'
-    print("📁 使用 SQLite 数据库（本地）")
+if not DATABASE_URL:
+    raise Exception("❌ DATABASE_URL 环境变量未设置！请在 Railway 添加 PostgreSQL 数据库")
 
 def get_db():
     """获取数据库连接"""
-    if USE_POSTGRES:
-        conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
-        return conn
-    else:
-        db = sqlite3.connect(DB_FILE)
-        db.row_factory = sqlite3.Row
-        return db
-
-def execute_query(cursor, query, params=()):
-    """执行查询，自动转换占位符"""
-    if USE_POSTGRES:
-        # 将 ? 替换为 %s
-        query = query.replace('?', '%s')
-    cursor.execute(query, params)
-    return cursor
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
 
 def init_db():
     """初始化数据库"""
     db = get_db()
     cursor = db.cursor()
     
-    if USE_POSTGRES:
-        # PostgreSQL 语法
-        execute_query(cursor, '''
-            CREATE TABLE IF NOT EXISTS licenses (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) NOT NULL UNIQUE,
-                ggid VARCHAR(100),
-                mac_address VARCHAR(100),
-                expiry_date TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT TRUE,
-                notes TEXT
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS admin_logs (
-                id SERIAL PRIMARY KEY,
-                action VARCHAR(255) NOT NULL,
-                target_email VARCHAR(255),
-                details TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-    else:
-        # SQLite 语法
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS licenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT NOT NULL UNIQUE,
-                ggid TEXT,
-                mac_address TEXT,
-                expiry_date DATETIME NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1,
-                notes TEXT
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS admin_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                action TEXT NOT NULL,
-                target_email TEXT,
-                details TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    # 创建许可证表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS licenses (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            ggid VARCHAR(100),
+            mac_address VARCHAR(100),
+            expiry_date TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT TRUE,
+            notes TEXT
+        )
+    ''')
+    
+    # 创建日志表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS admin_logs (
+            id SERIAL PRIMARY KEY,
+            action VARCHAR(255) NOT NULL,
+            target_email VARCHAR(255),
+            details TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     
     db.commit()
     db.close()
@@ -111,9 +68,9 @@ def log_action(action, target_email=None, details=None):
     try:
         db = get_db()
         cursor = db.cursor()
-        execute_query(cursor, '''
+        cursor.execute('''
             INSERT INTO admin_logs (action, target_email, details)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
         ''', (action, target_email, details))
         db.commit()
         db.close()
@@ -282,7 +239,7 @@ HTML_TEMPLATE = '''
         
         <div class="header">
             <h1>🔐 GTO 许可证管理系统</h1>
-            <p>License Management Dashboard</p>
+            <p>License Management Dashboard - PostgreSQL</p>
         </div>
         
         <div class="stats">
@@ -437,7 +394,7 @@ HTML_TEMPLATE = '''
         });
         
         async function extendLicense(id, email) {
-            const days = prompt(`延长许可证有效期（天数）\n用户：${email}`, '30');
+            const days = prompt(`延长许可证有效期（天数）\\n用户：${email}`, '30');
             if (!days) return;
             
             try {
@@ -460,7 +417,7 @@ HTML_TEMPLATE = '''
         }
         
         async function updateExpiry(id, email) {
-            const datetime = prompt(`设置新的到期时间\n用户：${email}\n\n格式：YYYY-MM-DD HH:MM:SS`, '');
+            const datetime = prompt(`设置新的到期时间\\n用户：${email}\\n\\n格式：YYYY-MM-DD HH:MM:SS`, '');
             if (!datetime) return;
             
             try {
@@ -483,7 +440,7 @@ HTML_TEMPLATE = '''
         }
         
         async function resetMac(id, email) {
-            if (!confirm(`确定要重置 MAC 地址吗？\n用户：${email}\n\n重置后该用户可以在新设备上登录`)) return;
+            if (!confirm(`确定要重置 MAC 地址吗？\\n用户：${email}\\n\\n重置后该用户可以在新设备上登录`)) return;
             
             try {
                 const response = await fetch('/api/reset_mac', {
@@ -505,7 +462,7 @@ HTML_TEMPLATE = '''
         }
         
         async function deleteUser(id, email) {
-            if (!confirm(`确定要删除用户吗？\n${email}`)) return;
+            if (!confirm(`确定要删除用户吗？\\n${email}`)) return;
             
             try {
                 const response = await fetch('/api/delete_user', {
@@ -638,11 +595,11 @@ def index():
         cursor = db.cursor()
         
         # 获取所有用户
-        execute_query(cursor, '''
+        cursor.execute('''
             SELECT id, email, ggid, mac_address, expiry_date, is_active, created_at,
                    CASE 
-                       WHEN is_active = 0 THEN 'inactive'
-                       WHEN datetime(expiry_date) < datetime('now', '+8 hours') THEN 'expired'
+                       WHEN is_active = FALSE THEN 'inactive'
+                       WHEN expiry_date < NOW() + INTERVAL '8 hours' THEN 'expired'
                        ELSE 'valid'
                    END AS status
             FROM licenses
@@ -651,20 +608,17 @@ def index():
         users = [dict(row) for row in cursor.fetchall()]
         
         # 统计信息
-        execute_query(cursor, "SELECT COUNT(*) as total FROM licenses")
+        cursor.execute("SELECT COUNT(*) as total FROM licenses")
         total = cursor.fetchone()['total']
         
-        if USE_POSTGRES:
-            execute_query(cursor, "SELECT COUNT(*) as valid FROM licenses WHERE is_active = TRUE AND expiry_date > NOW() + INTERVAL '8 hours'")
-        else:
-            execute_query(cursor, "SELECT COUNT(*) as valid FROM licenses WHERE is_active = 1 AND datetime(expiry_date) > datetime('now', '+8 hours')")
+        cursor.execute("SELECT COUNT(*) as valid FROM licenses WHERE is_active = TRUE AND expiry_date > NOW() + INTERVAL '8 hours'")
         valid = cursor.fetchone()['valid']
         
         expired = total - valid
         stats = {'total': total, 'valid': valid, 'expired': expired}
         
         # 获取最近日志
-        execute_query(cursor, '''
+        cursor.execute('''
             SELECT * FROM admin_logs
             ORDER BY timestamp DESC
             LIMIT 20
@@ -715,9 +669,9 @@ def api_verify():
         db = get_db()
         cursor = db.cursor()
         
-        execute_query(cursor, '''
+        cursor.execute('''
             SELECT * FROM licenses
-            WHERE email = ? AND is_active = 1
+            WHERE email = %s AND is_active = TRUE
         ''', (email,))
         
         license_data = cursor.fetchone()
@@ -729,8 +683,7 @@ def api_verify():
         license_dict = dict(license_data)
         
         # 检查是否过期（数据库存储北京时间）
-        expiry_str = license_dict['expiry_date']
-        expiry_dt = datetime.strptime(expiry_str, '%Y-%m-%d %H:%M:%S')
+        expiry_dt = license_dict['expiry_date']
         beijing_tz = timezone(timedelta(hours=8))
         expiry_beijing = expiry_dt.replace(tzinfo=beijing_tz)
         expiry_utc = expiry_beijing.astimezone(timezone.utc)
@@ -744,7 +697,7 @@ def api_verify():
         if mac_address:
             if not license_dict['mac_address']:
                 # 首次登录，绑定 MAC
-                execute_query(cursor, 'UPDATE licenses SET mac_address = ? WHERE email = ?', (mac_address, email))
+                cursor.execute('UPDATE licenses SET mac_address = %s WHERE email = %s', (mac_address, email))
                 db.commit()
                 license_dict['mac_address'] = mac_address
                 log_action('首次登录（绑定MAC）', email, f'MAC: {mac_address}')
@@ -795,14 +748,13 @@ def api_add_user():
         beijing_tz = timezone(timedelta(hours=8))
         now_beijing = datetime.now(beijing_tz)
         expiry_date = now_beijing + timedelta(days=duration)
-        expiry_str = expiry_date.strftime('%Y-%m-%d %H:%M:%S')
         
         db = get_db()
         cursor = db.cursor()
-        execute_query(cursor, '''
+        cursor.execute('''
             INSERT INTO licenses (email, ggid, expiry_date, notes)
-            VALUES (?, ?, ?, ?)
-        ''', (email, ggid, expiry_str, notes))
+            VALUES (%s, %s, %s, %s)
+        ''', (email, ggid, expiry_date, notes))
         db.commit()
         db.close()
         
@@ -810,7 +762,7 @@ def api_add_user():
         
         return jsonify({'success': True})
         
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         return jsonify({'success': False, 'error': '该邮箱已存在'}), 400
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -829,17 +781,17 @@ def api_extend_license():
         db = get_db()
         cursor = db.cursor()
         
-        execute_query(cursor, 'SELECT email, expiry_date FROM licenses WHERE id = ?', (user_id,))
+        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
         user = cursor.fetchone()
         
         if not user:
             return jsonify({'success': False, 'error': '用户不存在'}), 404
         
-        execute_query(cursor, '''
+        cursor.execute('''
             UPDATE licenses 
-            SET expiry_date = datetime(expiry_date, '+' || ? || ' days'),
-                is_active = 1
-            WHERE id = ?
+            SET expiry_date = expiry_date + INTERVAL '%s days',
+                is_active = TRUE
+            WHERE id = %s
         ''', (days, user_id))
         db.commit()
         db.close()
@@ -865,10 +817,10 @@ def api_update_expiry():
         db = get_db()
         cursor = db.cursor()
         
-        execute_query(cursor, 'SELECT email FROM licenses WHERE id = ?', (user_id,))
+        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
         user = cursor.fetchone()
         
-        execute_query(cursor, 'UPDATE licenses SET expiry_date = ? WHERE id = ?', (datetime_str, user_id))
+        cursor.execute('UPDATE licenses SET expiry_date = %s WHERE id = %s', (datetime_str, user_id))
         db.commit()
         db.close()
         
@@ -892,10 +844,10 @@ def api_reset_mac():
         db = get_db()
         cursor = db.cursor()
         
-        execute_query(cursor, 'SELECT email, mac_address FROM licenses WHERE id = ?', (user_id,))
+        cursor.execute('SELECT email, mac_address FROM licenses WHERE id = %s', (user_id,))
         user = cursor.fetchone()
         
-        execute_query(cursor, 'UPDATE licenses SET mac_address = NULL WHERE id = ?', (user_id,))
+        cursor.execute('UPDATE licenses SET mac_address = NULL WHERE id = %s', (user_id,))
         db.commit()
         db.close()
         
@@ -919,10 +871,10 @@ def api_delete_user():
         db = get_db()
         cursor = db.cursor()
         
-        execute_query(cursor, 'SELECT email FROM licenses WHERE id = ?', (user_id,))
+        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
         user = cursor.fetchone()
         
-        execute_query(cursor, 'DELETE FROM licenses WHERE id = ?', (user_id,))
+        cursor.execute('DELETE FROM licenses WHERE id = %s', (user_id,))
         db.commit()
         db.close()
         
@@ -936,18 +888,21 @@ def api_delete_user():
 @app.route('/health')
 def health():
     """健康检查"""
-    return jsonify({'status': 'ok'}), 200
+    return jsonify({'status': 'ok', 'database': 'PostgreSQL'}), 200
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🔐 GTO 许可证管理系统")
+    print("🔐 GTO 许可证管理系统 - PostgreSQL 版本")
     print("=" * 60)
     print("")
     
     # 初始化数据库
-    if not os.path.exists(DB_FILE):
-        print("📊 首次运行，正在初始化数据库...")
+    try:
+        print("📊 初始化数据库...")
         init_db()
+    except Exception as e:
+        print(f"❌ 数据库初始化失败: {e}")
+        print("⚠️  请确保 DATABASE_URL 环境变量已设置")
     
     # Railway 需要使用 $PORT 环境变量
     port = int(os.getenv('PORT', 8000))
@@ -955,10 +910,10 @@ if __name__ == '__main__':
     print(f"📊 Dashboard: http://0.0.0.0:{port}")
     print(f"🔌 API端点: http://0.0.0.0:{port}/api/verify")
     print("🔑 管理员密码: SW1024sw..")
+    print("🐘 数据库: PostgreSQL")
     print("")
     print("⚠️  按 Ctrl+C 停止服务器")
     print("=" * 60)
     print("")
     
     app.run(host='0.0.0.0', port=port, debug=False)
-
