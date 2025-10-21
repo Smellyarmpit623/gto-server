@@ -1,27 +1,39 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GTO 许可证管理系统 - PostgreSQL 版本
-Dashboard + API + PostgreSQL
+GTO 服务器 - License Key 系统 + GTO API 模拟 + Socket.IO
+完整版：Dashboard + API + WebSocket
 """
 
 from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
+from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import secrets
+import hashlib
+import uuid
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
+CORS(app)
+
+# Socket.IO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # 管理员密码
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'SW1024sw..')
 
-# PostgreSQL 数据库 URL
+# PostgreSQL
 DATABASE_URL = os.getenv('DATABASE_URL')
-
 if not DATABASE_URL:
-    raise Exception("❌ DATABASE_URL 环境变量未设置！请在 Railway 添加 PostgreSQL 数据库")
+    raise Exception("❌ DATABASE_URL 环境变量未设置！")
+
+# ============================================
+# 数据库操作
+# ============================================
 
 def get_db():
     """获取数据库连接"""
@@ -33,29 +45,41 @@ def init_db():
     db = get_db()
     cursor = db.cursor()
     
-    # 创建许可证表
+    # License Key 表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS licenses (
             id SERIAL PRIMARY KEY,
-            email VARCHAR(255) NOT NULL UNIQUE,
-            ggid VARCHAR(100),
-            mac_address VARCHAR(100),
+            license_key VARCHAR(50) NOT NULL UNIQUE,
+            hwid VARCHAR(100),
+            email VARCHAR(255),
             expiry_date TIMESTAMP NOT NULL,
             stake_level INTEGER DEFAULT 25,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            max_devices INTEGER DEFAULT 1,
             is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used TIMESTAMP,
             notes TEXT
         )
     ''')
     
-    # 创建日志表
+    # 日志表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS admin_logs (
             id SERIAL PRIMARY KEY,
             action VARCHAR(255) NOT NULL,
-            target_email VARCHAR(255),
+            target_key VARCHAR(50),
             details TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # 使用统计表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS usage_stats (
+            id SERIAL PRIMARY KEY,
+            license_key VARCHAR(50) NOT NULL,
+            hwid VARCHAR(100),
+            ip_address VARCHAR(50),
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -64,29 +88,308 @@ def init_db():
     db.close()
     print('✅ 数据库初始化完成')
 
-def log_action(action, target_email=None, details=None):
+def log_action(action, target_key=None, details=None):
     """记录管理员操作"""
     try:
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            INSERT INTO admin_logs (action, target_email, details)
+            INSERT INTO admin_logs (action, target_key, details)
             VALUES (%s, %s, %s)
-        ''', (action, target_email, details))
+        ''', (action, target_key, details))
         db.commit()
         db.close()
-        print(f'[LOG] {action}: {target_email} - {details}')
     except Exception as e:
         print(f'[LOG ERROR] {e}')
 
-# HTML 模板（包含登录和管理界面）
-HTML_TEMPLATE = '''
+def log_usage(license_key, hwid, ip_address):
+    """记录使用统计"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('''
+            INSERT INTO usage_stats (license_key, hwid, ip_address)
+            VALUES (%s, %s, %s)
+        ''', (license_key, hwid, ip_address))
+        
+        # 更新 last_used
+        cursor.execute('''
+            UPDATE licenses SET last_used = CURRENT_TIMESTAMP
+            WHERE license_key = %s
+        ''', (license_key,))
+        
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f'[USAGE ERROR] {e}')
+
+def generate_license_key():
+    """生成 License Key"""
+    # 格式: GTO-XXXX-YYYY-ZZZZ
+    parts = [
+        'GTO',
+        secrets.token_hex(2).upper(),
+        secrets.token_hex(2).upper(),
+        secrets.token_hex(2).upper()
+    ]
+    return '-'.join(parts)
+
+# ============================================
+# API 端点 - License 验证
+# ============================================
+
+@app.route('/api/verify', methods=['POST', 'OPTIONS'])
+def verify_license():
+    """验证 License Key"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    try:
+        data = request.json
+        license_key = data.get('license_key', '').strip()
+        hwid = data.get('hwid', '').strip()
+        
+        if not license_key or not hwid:
+            return jsonify({'error': '缺少 license_key 或 hwid'}), 400
+        
+        db = get_db()
+        cursor = db.cursor()
+        
+        # 查询 License
+        cursor.execute('''
+            SELECT * FROM licenses 
+            WHERE license_key = %s AND is_active = TRUE
+        ''', (license_key,))
+        
+        license_data = cursor.fetchone()
+        
+        if not license_data:
+            db.close()
+            return jsonify({'error': '无效的 License Key'}), 401
+        
+        # 检查过期
+        expiry_date = license_data['expiry_date']
+        if expiry_date.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            db.close()
+            return jsonify({'error': 'License 已过期'}), 401
+        
+        # HWID 绑定检查
+        stored_hwid = license_data['hwid']
+        if stored_hwid is None:
+            # 首次使用，绑定 HWID
+            cursor.execute('''
+                UPDATE licenses SET hwid = %s 
+                WHERE license_key = %s
+            ''', (hwid, license_key))
+            db.commit()
+            print(f'[BIND] {license_key} → {hwid}')
+        elif stored_hwid != hwid:
+            # HWID 不匹配
+            db.close()
+            return jsonify({'error': 'HWID 不匹配，此 License 已绑定其他设备'}), 403
+        
+        db.close()
+        
+        # 记录使用
+        log_usage(license_key, hwid, request.remote_addr)
+        
+        # 返回成功
+        return jsonify({
+            'success': True,
+            'license_key': license_key,
+            'expiry_date': expiry_date.isoformat(),
+            'stake_level': license_data['stake_level'],
+            'days_remaining': (expiry_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).days
+        }), 200
+        
+    except Exception as e:
+        print(f'[VERIFY ERROR] {e}')
+        return jsonify({'error': f'服务器错误: {str(e)}'}), 500
+
+@app.route('/api/config/<license_key>', methods=['GET'])
+def get_config(license_key):
+    """获取用户配置"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        cursor.execute('''
+            SELECT stake_level, expiry_date FROM licenses 
+            WHERE license_key = %s AND is_active = TRUE
+        ''', (license_key,))
+        
+        license_data = cursor.fetchone()
+        db.close()
+        
+        if not license_data:
+            return jsonify({'error': '无效的 License'}), 401
+        
+        return jsonify({
+            'stake_level': license_data['stake_level'],
+            'expiry_date': license_data['expiry_date'].isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================
+# API 端点 - GTO API 模拟
+# ============================================
+
+@app.route('/api/versions', methods=['GET', 'OPTIONS'])
+def api_versions():
+    """模拟版本检查"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    return jsonify({
+        "data": [
+            {
+                "id": 1,
+                "attributes": {
+                    "version": "137.5.0",
+                    "released_at": "2024-01-01T00:00:00Z",
+                    "required": False,
+                    "changelog": "Pro version enabled"
+                }
+            }
+        ],
+        "meta": {
+            "total": 1,
+            "current_version": "137.5.0"
+        }
+    }), 200
+
+@app.route('/api/auth/local', methods=['POST', 'OPTIONS'])
+def api_auth():
+    """模拟登录"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    data = request.json or {}
+    email = data.get('email', 'pro@gto.local')
+    
+    # 生成假 JWT
+    fake_jwt = f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{secrets.token_urlsafe(32)}"
+    
+    return jsonify({
+        "data": {
+            "token": fake_jwt,
+            "user": {
+                "id": 1,
+                "email": email,
+                "username": "Pro User",
+                "plan": "Pro",
+                "isPro": True,
+                "stakes_level": 50
+            }
+        }
+    }), 200
+
+@app.route('/users/me', methods=['GET', 'OPTIONS'])
+def users_me():
+    """模拟用户信息"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    return jsonify({
+        "data": {
+            "id": 1,
+            "email": "pro@gto.local",
+            "username": "Pro User",
+            "plan": "Pro",
+            "isPro": True,
+            "stakes_level": 50,
+            "expired_at": None
+        }
+    }), 200
+
+@app.route('/appconfig.json', methods=['GET'])
+def appconfig():
+    """模拟应用配置"""
+    return jsonify({
+        "version": "137.5.0",
+        "features": {
+            "pro": True,
+            "gto": True,
+            "solver": True
+        },
+        "limits": {
+            "stakes_level": 50
+        }
+    }), 200
+
+# ============================================
+# Socket.IO - WebSocket 模拟
+# ============================================
+
+@socketio.on('connect')
+def handle_connect():
+    """主命名空间连接"""
+    print(f'[WS] Client connected: {request.sid}')
+    emit('connected', {
+        'status': 'ok',
+        'plan': 'Pro',
+        'message': 'Welcome to GTO Pro'
+    })
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """主命名空间断开"""
+    print(f'[WS] Client disconnected: {request.sid}')
+
+@socketio.on('ping')
+def handle_ping():
+    """Ping-Pong"""
+    emit('pong', {'timestamp': datetime.now(timezone.utc).isoformat()})
+
+@socketio.on('join')
+def handle_join(data):
+    """加入房间"""
+    room = data.get('room', 'default')
+    join_room(room)
+    emit('swap done', {'room': room, 'status': 'joined'}, room=room)
+
+# /rtd 命名空间
+@socketio.on('connect', namespace='/rtd')
+def rtd_connect():
+    """RTD 命名空间连接"""
+    print(f'[WS/rtd] Client connected: {request.sid}')
+    emit('connected', {'namespace': 'rtd', 'status': 'ok'})
+
+@socketio.on('ping', namespace='/rtd')
+def rtd_ping():
+    """RTD Ping"""
+    emit('pong', {'namespace': 'rtd'})
+
+@socketio.on('disconnect', namespace='/rtd')
+def rtd_disconnect():
+    """RTD 断开"""
+    print(f'[WS/rtd] Client disconnected: {request.sid}')
+
+# /home 命名空间
+@socketio.on('connect', namespace='/home')
+def home_connect():
+    """Home 命名空间连接"""
+    print(f'[WS/home] Client connected: {request.sid}')
+    emit('connected', {'namespace': 'home', 'status': 'ok'})
+
+@socketio.on('disconnect', namespace='/home')
+def home_disconnect():
+    """Home 断开"""
+    print(f'[WS/home] Client disconnected: {request.sid}')
+
+# ============================================
+# Dashboard - 管理界面
+# ============================================
+
+DASHBOARD_HTML = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTO 许可证管理系统</title>
+    <title>GTO License Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -97,416 +400,364 @@ HTML_TEMPLATE = '''
         }
         .container { max-width: 1400px; margin: 0 auto; }
         .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        .logout-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-        }
-        .logout-btn:hover { background: rgba(255,255,255,0.3); }
-        .card {
             background: white;
-            border-radius: 15px;
             padding: 30px;
+            border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             margin-bottom: 30px;
+            text-align: center;
         }
-        .card h2 {
+        .header h1 {
             color: #667eea;
-            margin-bottom: 20px;
-            font-size: 1.8em;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
+            font-size: 2.5em;
+            margin-bottom: 10px;
         }
-        .form-group {
-            margin-bottom: 20px;
+        .header p {
+            color: #666;
+            font-size: 1.1em;
         }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 600;
-        }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e8ed;
-            border-radius: 8px;
-            font-size: 1em;
-        }
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 14px 30px;
-            border-radius: 8px;
-            font-size: 1em;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-        .action-btn {
-            padding: 8px 16px;
-            margin: 0 5px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.9em;
-        }
-        .action-btn.extend { background: #28a745; color: white; }
-        .action-btn.extend:hover { background: #218838; }
-        .action-btn.delete { background: #dc3545; color: white; }
-        .action-btn.delete:hover { background: #c82333; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            overflow-x: auto;
-            display: block;
-        }
-        table thead, table tbody {
-            display: table;
-            width: 100%;
-            table-layout: auto;
-        }
-        table th, table td {
-            padding: 12px 10px;
-            text-align: left;
-            border-bottom: 1px solid #e1e8ed;
-            white-space: nowrap;
-        }
-        table th {
-            background: #f7f9fc;
-            color: #667eea;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.85em;
-        }
-        table tr:hover { background: #f7f9fc; }
-        .mac-unbound { color: #999; font-style: italic; }
-        .status {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-        .status.valid { background: #d4edda; color: #155724; }
-        .status.expired { background: #f8d7da; color: #721c24; }
         .stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
         .stat-card {
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
+            padding: 25px;
+            border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
         }
         .stat-card .number {
             font-size: 2.5em;
             font-weight: bold;
             color: #667eea;
         }
-        .stat-card .label { color: #666; font-size: 0.9em; }
-        .alert {
+        .main-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .section-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #229954;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .status-active {
+            color: #27ae60;
+            font-weight: 600;
+        }
+        .status-expired {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .action-buttons button {
+            padding: 6px 12px;
+            font-size: 0.9em;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f8f9fa;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .tab:hover {
+            background: #e8e9eb;
+        }
+        .tab.active:hover {
+            background: #5568d3;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .message {
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
-            display: none;
         }
-        .alert.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .message-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .logout {
+            float: right;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <button class="logout-btn" onclick="logout()">登出</button>
-        
         <div class="header">
-            <h1>🔐 GTO 许可证管理系统</h1>
-            <p>License Management Dashboard - PostgreSQL</p>
+            <h1>🎮 GTO License Dashboard</h1>
+            <p>License Key 管理系统</p>
+            <button class="btn btn-danger logout" onclick="logout()">退出登录</button>
         </div>
-        
+
+        {% if message %}
+        <div class="message message-{{ message_type }}">
+            {{ message }}
+        </div>
+        {% endif %}
+
         <div class="stats">
             <div class="stat-card">
+                <h3>总 License 数</h3>
                 <div class="number">{{ stats.total }}</div>
-                <div class="label">总用户数</div>
             </div>
             <div class="stat-card">
-                <div class="number">{{ stats.valid }}</div>
-                <div class="label">有效许可证</div>
+                <h3>激活中</h3>
+                <div class="number">{{ stats.active }}</div>
             </div>
             <div class="stat-card">
+                <h3>已过期</h3>
                 <div class="number">{{ stats.expired }}</div>
-                <div class="label">已过期</div>
+            </div>
+            <div class="stat-card">
+                <h3>今日使用</h3>
+                <div class="number">{{ stats.today_usage }}</div>
             </div>
         </div>
-        
-        <div class="card">
-            <h2>➕ 添加新用户</h2>
-            <div id="alertBox" class="alert"></div>
-            <form id="addUserForm">
-                <div class="form-group">
-                    <label for="email">📧 邮箱</label>
-                    <input type="email" id="email" name="email" required placeholder="user@example.com">
-                </div>
-                <div class="form-group">
-                    <label for="ggid">🆔 GG ID（可选）</label>
-                    <input type="text" id="ggid" name="ggid" placeholder="GG123456">
-                </div>
-                <div class="form-group">
-                    <label for="duration">⏰ 有效期</label>
-                    <select id="duration" name="duration">
-                        <option value="0.167">4小时</option>
-                        <option value="1">1天</option>
-                        <option value="7">7天</option>
-                        <option value="30" selected>30天（1个月）</option>
-                        <option value="90">90天（3个月）</option>
-                        <option value="180">180天（6个月）</option>
-                        <option value="365">365天（1年）</option>
-                        <option value="3650">3650天（10年）</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="stake_level">🎯 Stake Level</label>
-                    <input type="number" id="stake_level" name="stake_level" value="25" min="1" max="100" placeholder="25">
-                </div>
-                <div class="form-group">
-                    <label for="notes">📝 备注（可选）</label>
-                    <input type="text" id="notes" name="notes" placeholder="备注信息">
-                </div>
-                <button type="submit" class="btn">添加用户</button>
-            </form>
-        </div>
-        
-        <div class="card">
-            <h2>📋 用户列表</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>邮箱</th>
-                        <th>GG ID</th>
-                        <th>MAC 地址</th>
-                        <th>SL</th>
-                        <th>到期时间</th>
-                        <th>状态</th>
-                        <th>创建时间</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for user in users %}
-                    <tr>
-                        <td>{{ user.id }}</td>
-                        <td>{{ user.email }}</td>
-                        <td>{{ user.ggid or '-' }}</td>
-                        <td>
-                            {% if user.mac_address %}
-                            {{ user.mac_address }}
-                            {% else %}
-                            <span class="mac-unbound">未绑定</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ user.stake_level or 25 }}</td>
-                        <td>{{ user.expiry_date }}</td>
-                        <td>
-                            {% if user.status == 'valid' %}
-                            <span class="status valid">有效</span>
-                            {% else %}
-                            <span class="status expired">已过期</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ user.created_at }}</td>
-                        <td>
-                            <button class="action-btn extend" onclick="extendLicense({{ user.id }}, '{{ user.email }}')">延期</button>
-                            <button class="action-btn extend" onclick="updateExpiry({{ user.id }}, '{{ user.email }}')">修改</button>
-                            {% if user.mac_address %}
-                            <button class="action-btn extend" onclick="resetMac({{ user.id }}, '{{ user.email }}')">重置MAC</button>
-                            {% endif %}
-                            <button class="action-btn delete" onclick="deleteUser({{ user.id }}, '{{ user.email }}')">删除</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="card">
-            <h2>📜 操作日志（最近20条）</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>时间</th>
-                        <th>操作</th>
-                        <th>目标邮箱</th>
-                        <th>详情</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in logs %}
-                    <tr>
-                        <td>{{ log.timestamp }}</td>
-                        <td>{{ log.action }}</td>
-                        <td>{{ log.target_email or '-' }}</td>
-                        <td>{{ log.details or '-' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+
+        <div class="main-content">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('licenses')">License 管理</button>
+                <button class="tab" onclick="switchTab('create')">生成 License</button>
+                <button class="tab" onclick="switchTab('logs')">操作日志</button>
+            </div>
+
+            <!-- License 列表 -->
+            <div id="licenses" class="tab-content active">
+                <h2 class="section-title">License 列表</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>License Key</th>
+                            <th>HWID</th>
+                            <th>到期时间</th>
+                            <th>Stake Level</th>
+                            <th>最后使用</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lic in licenses %}
+                        <tr>
+                            <td><code>{{ lic.license_key }}</code></td>
+                            <td><small>{{ lic.hwid[:20] if lic.hwid else '未绑定' }}</small></td>
+                            <td>{{ lic.expiry_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>{{ lic.stake_level }}</td>
+                            <td>{{ lic.last_used.strftime('%Y-%m-%d %H:%M') if lic.last_used else '从未使用' }}</td>
+                            <td>
+                                {% if lic.is_active and lic.expiry_date > now %}
+                                <span class="status-active">✅ 激活</span>
+                                {% else %}
+                                <span class="status-expired">❌ 过期</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <form method="POST" action="/extend" style="display:inline;">
+                                        <input type="hidden" name="license_key" value="{{ lic.license_key }}">
+                                        <button type="submit" class="btn btn-success">+30天</button>
+                                    </form>
+                                    <form method="POST" action="/reset-hwid" style="display:inline;">
+                                        <input type="hidden" name="license_key" value="{{ lic.license_key }}">
+                                        <button type="submit" class="btn btn-primary">重置HWID</button>
+                                    </form>
+                                    <form method="POST" action="/delete" style="display:inline;">
+                                        <input type="hidden" name="license_key" value="{{ lic.license_key }}">
+                                        <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除？')">删除</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 生成 License -->
+            <div id="create" class="tab-content">
+                <h2 class="section-title">生成新 License</h2>
+                <form method="POST" action="/create-license">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>有效期（天）</label>
+                            <input type="number" name="days" value="30" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Stake Level</label>
+                            <input type="number" name="stake_level" value="25" required>
+                        </div>
+                        <div class="form-group">
+                            <label>最大设备数</label>
+                            <input type="number" name="max_devices" value="1" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱（可选）</label>
+                        <input type="email" name="email" placeholder="user@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>备注（可选）</label>
+                        <textarea name="notes" rows="3" placeholder="备注信息..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">🎁 生成 License Key</button>
+                </form>
+            </div>
+
+            <!-- 操作日志 -->
+            <div id="logs" class="tab-content">
+                <h2 class="section-title">操作日志</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>操作</th>
+                            <th>License Key</th>
+                            <th>详情</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ log.action }}</td>
+                            <td><code>{{ log.target_key }}</code></td>
+                            <td><small>{{ log.details }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-    
+
     <script>
-        function showAlert(message, type) {
-            const alertBox = document.getElementById('alertBox');
-            alertBox.textContent = message;
-            alertBox.className = 'alert ' + type;
-            alertBox.style.display = 'block';
-            setTimeout(() => alertBox.style.display = 'none', 5000);
-        }
-        
-        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
+        function switchTab(tabName) {
+            // 隐藏所有内容
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
             
-            try {
-                const response = await fetch('/api/add_user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    showAlert('✅ 用户添加成功！', 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showAlert('❌ ' + result.error, 'error');
-                }
-            } catch (err) {
-                showAlert('❌ 网络错误：' + err.message, 'error');
-            }
-        });
-        
-        async function extendLicense(id, email) {
-            const days = prompt(`延长许可证有效期（天数）\\n用户：${email}`, '30');
-            if (!days) return;
-            
-            try {
-                const response = await fetch('/api/extend_license', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, days: parseFloat(days) })
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ 许可证已延长！');
-                    location.reload();
-                } else {
-                    alert('❌ ' + result.error);
-                }
-            } catch (err) {
-                alert('❌ 网络错误：' + err.message);
-            }
+            // 显示选中的
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
         }
-        
-        async function updateExpiry(id, email) {
-            const datetime = prompt(`设置新的到期时间\\n用户：${email}\\n\\n格式：YYYY-MM-DD HH:MM:SS`, '');
-            if (!datetime) return;
-            
-            try {
-                const response = await fetch('/api/update_expiry', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, datetime })
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ 到期时间已更新！');
-                    location.reload();
-                } else {
-                    alert('❌ ' + result.error);
-                }
-            } catch (err) {
-                alert('❌ 网络错误：' + err.message);
-            }
-        }
-        
-        async function resetMac(id, email) {
-            if (!confirm(`确定要重置 MAC 地址吗？\\n用户：${email}\\n\\n重置后该用户可以在新设备上登录`)) return;
-            
-            try {
-                const response = await fetch('/api/reset_mac', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id })
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ MAC 地址已重置！');
-                    location.reload();
-                } else {
-                    alert('❌ ' + result.error);
-                }
-            } catch (err) {
-                alert('❌ 网络错误：' + err.message);
-            }
-        }
-        
-        async function deleteUser(id, email) {
-            if (!confirm(`确定要删除用户吗？\\n${email}`)) return;
-            
-            try {
-                const response = await fetch('/api/delete_user', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id })
-                });
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ 用户已删除！');
-                    location.reload();
-                } else {
-                    alert('❌ ' + result.error);
-                }
-            } catch (err) {
-                alert('❌ 网络错误：' + err.message);
-            }
-        }
-        
+
         function logout() {
-            if (confirm('确定要登出吗？')) {
+            if (confirm('确定退出登录？')) {
                 window.location.href = '/logout';
             }
         }
@@ -515,50 +766,53 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-LOGIN_TEMPLATE = '''
+LOGIN_HTML = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - GTO 许可证管理系统</title>
+    <title>GTO Dashboard - 登录</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
         }
         .login-box {
             background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 50px 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             width: 400px;
+            text-align: center;
         }
         .login-box h1 {
             color: #667eea;
+            font-size: 2em;
             margin-bottom: 30px;
-            text-align: center;
         }
         .form-group {
             margin-bottom: 20px;
+            text-align: left;
         }
         .form-group label {
             display: block;
             margin-bottom: 8px;
             color: #333;
-            font-weight: 600;
+            font-weight: 500;
         }
         .form-group input {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e1e8ed;
-            border-radius: 8px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
             font-size: 1em;
+            transition: border-color 0.3s;
         }
         .form-group input:focus {
             outline: none;
@@ -566,407 +820,292 @@ LOGIN_TEMPLATE = '''
         }
         .btn {
             width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px;
+            background: #667eea;
             color: white;
             border: none;
-            padding: 14px;
-            border-radius: 8px;
-            font-size: 1em;
-            cursor: pointer;
+            border-radius: 10px;
+            font-size: 1.1em;
             font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
         }
         .btn:hover {
+            background: #5568d3;
             transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
         }
         .error {
-            color: #dc3545;
-            margin-top: 10px;
-            text-align: center;
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
         }
     </style>
 </head>
 <body>
     <div class="login-box">
-        <h1>🔐 管理员登录</h1>
+        <h1>🎮 GTO Dashboard</h1>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
         <form method="POST" action="/login">
             <div class="form-group">
-                <label for="password">密码</label>
-                <input type="password" id="password" name="password" required autofocus>
+                <label>管理员密码</label>
+                <input type="password" name="password" required autofocus>
             </div>
             <button type="submit" class="btn">登录</button>
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
         </form>
     </div>
 </body>
 </html>
 '''
 
-# ========== 路由 ==========
-
 @app.route('/')
 def index():
-    """主页面（需要登录）"""
-    if 'logged_in' not in session:
-        return redirect(url_for('login_page'))
+    """首页 - Dashboard"""
+    if 'admin' not in session:
+        return redirect(url_for('login'))
     
     try:
         db = get_db()
         cursor = db.cursor()
         
-        # 获取所有用户
+        # 获取所有 License
         cursor.execute('''
-            SELECT id, email, ggid, mac_address, expiry_date, is_active, created_at,
-                   CASE 
-                       WHEN is_active = FALSE THEN 'inactive'
-                       WHEN expiry_date < NOW() + INTERVAL '8 hours' THEN 'expired'
-                       ELSE 'valid'
-                   END AS status
-            FROM licenses
+            SELECT * FROM licenses 
             ORDER BY created_at DESC
         ''')
-        users = [dict(row) for row in cursor.fetchall()]
+        licenses = cursor.fetchall()
         
-        # 统计信息
-        cursor.execute("SELECT COUNT(*) as total FROM licenses")
-        total = cursor.fetchone()['total']
+        # 统计
+        now = datetime.now(timezone.utc)
+        total = len(licenses)
+        active = sum(1 for lic in licenses if lic['is_active'] and lic['expiry_date'].replace(tzinfo=timezone.utc) > now)
+        expired = total - active
         
-        cursor.execute("SELECT COUNT(*) as valid FROM licenses WHERE is_active = TRUE AND expiry_date > NOW() + INTERVAL '8 hours'")
-        valid = cursor.fetchone()['valid']
-        
-        expired = total - valid
-        stats = {'total': total, 'valid': valid, 'expired': expired}
-        
-        # 获取最近日志
+        # 今日使用
         cursor.execute('''
-            SELECT * FROM admin_logs
-            ORDER BY timestamp DESC
-            LIMIT 20
+            SELECT COUNT(DISTINCT license_key) 
+            FROM usage_stats 
+            WHERE DATE(timestamp) = CURRENT_DATE
         ''')
-        logs = [dict(row) for row in cursor.fetchall()]
+        today_usage = cursor.fetchone()[0] or 0
+        
+        # 操作日志
+        cursor.execute('''
+            SELECT * FROM admin_logs 
+            ORDER BY timestamp DESC 
+            LIMIT 50
+        ''')
+        logs = cursor.fetchall()
         
         db.close()
         
-        return render_template_string(HTML_TEMPLATE, users=users, stats=stats, logs=logs)
+        return render_template_string(DASHBOARD_HTML, 
+            licenses=licenses,
+            logs=logs,
+            stats={
+                'total': total,
+                'active': active,
+                'expired': expired,
+                'today_usage': today_usage
+            },
+            now=now,
+            message=session.pop('message', None),
+            message_type=session.pop('message_type', 'success')
+        )
         
     except Exception as e:
-        return f"数据库错误: {str(e)}", 500
+        return f'数据库错误: {str(e)}', 500
 
 @app.route('/login', methods=['GET', 'POST'])
-def login_page():
-    """登录页面"""
+def login():
+    """登录"""
     if request.method == 'POST':
         password = request.form.get('password')
         if password == ADMIN_PASSWORD:
-            session['logged_in'] = True
-            log_action('管理员登录', details='成功')
+            session['admin'] = True
             return redirect(url_for('index'))
         else:
-            log_action('管理员登录', details='密码错误')
-            return render_template_string(LOGIN_TEMPLATE, error='密码错误')
-    return render_template_string(LOGIN_TEMPLATE)
+            return render_template_string(LOGIN_HTML, error='密码错误')
+    return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
 def logout():
     """登出"""
-    session.pop('logged_in', None)
-    log_action('管理员登出')
-    return redirect(url_for('login_page'))
+    session.clear()
+    return redirect(url_for('login'))
 
-# ========== API 端点 ==========
-
-@app.route('/api/verify', methods=['POST'])
-def api_verify():
-    """验证许可证（供应用程序调用）"""
-    try:
-        data = request.json
-        email = data.get('email')
-        mac_address = data.get('mac_address')
-        
-        if not email:
-            return jsonify({'success': False, 'error': '邮箱不能为空'}), 400
-        
-        db = get_db()
-        cursor = db.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM licenses
-            WHERE email = %s AND is_active = TRUE
-        ''', (email,))
-        
-        license_data = cursor.fetchone()
-        
-        if not license_data:
-            db.close()
-            return jsonify({'success': False, 'error': '许可证不存在或未激活'}), 404
-        
-        license_dict = dict(license_data)
-        
-        # 检查是否过期（数据库存储北京时间）
-        expiry_dt = license_dict['expiry_date']
-        beijing_tz = timezone(timedelta(hours=8))
-        expiry_beijing = expiry_dt.replace(tzinfo=beijing_tz)
-        expiry_utc = expiry_beijing.astimezone(timezone.utc)
-        now_utc = datetime.now(timezone.utc)
-        
-        if expiry_utc < now_utc:
-            db.close()
-            return jsonify({'success': False, 'error': '许可证已过期'}), 403
-        
-        # MAC 地址验证
-        if mac_address:
-            if not license_dict['mac_address']:
-                # 首次登录，绑定 MAC
-                cursor.execute('UPDATE licenses SET mac_address = %s WHERE email = %s', (mac_address, email))
-                db.commit()
-                license_dict['mac_address'] = mac_address
-                log_action('首次登录（绑定MAC）', email, f'MAC: {mac_address}')
-            elif license_dict['mac_address'] != mac_address:
-                # MAC 不匹配
-                db.close()
-                return jsonify({
-                    'success': False,
-                    'error': 'MAC 地址不匹配',
-                    'bound_mac': license_dict['mac_address'],
-                    'current_mac': mac_address
-                }), 403
-        
-        db.close()
-        
-        return jsonify({
-            'success': True,
-            'license': {
-                'email': license_dict['email'],
-                'ggid': license_dict['ggid'],
-                'expiry_date': expiry_utc.isoformat(),
-                'is_active': license_dict['is_active'],
-                'mac_address': license_dict['mac_address'],
-                'stake_level': license_dict.get('stake_level', 25)
-            }
-        }), 200
-        
-    except Exception as e:
-        print(f'[API ERROR] {e}')
-        return jsonify({'success': False, 'error': '服务器内部错误'}), 500
-
-@app.route('/api/add_user', methods=['POST'])
-def api_add_user():
-    """添加新用户"""
-    if 'logged_in' not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+@app.route('/create-license', methods=['POST'])
+def create_license():
+    """生成新 License"""
+    if 'admin' not in session:
+        return redirect(url_for('login'))
     
     try:
-        data = request.json
-        email = data.get('email')
-        ggid = data.get('ggid')
-        duration = float(data.get('duration', 30))
-        stake_level = int(data.get('stake_level', 25))
-        notes = data.get('notes')
+        days = int(request.form.get('days', 30))
+        stake_level = int(request.form.get('stake_level', 25))
+        max_devices = int(request.form.get('max_devices', 1))
+        email = request.form.get('email', '').strip()
+        notes = request.form.get('notes', '').strip()
         
-        if not email:
-            return jsonify({'success': False, 'error': '邮箱不能为空'}), 400
-        
-        # 计算到期时间（北京时间）
-        beijing_tz = timezone(timedelta(hours=8))
-        now_beijing = datetime.now(beijing_tz)
-        expiry_date = now_beijing + timedelta(days=duration)
+        # 生成 License Key
+        license_key = generate_license_key()
+        expiry_date = datetime.now(timezone.utc) + timedelta(days=days)
         
         db = get_db()
         cursor = db.cursor()
+        
         cursor.execute('''
-            INSERT INTO licenses (email, ggid, expiry_date, stake_level, notes)
-            VALUES (%s, %s, %s, %s, %s)
-        ''', (email, ggid, expiry_date, stake_level, notes))
+            INSERT INTO licenses (license_key, expiry_date, stake_level, max_devices, email, notes)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (license_key, expiry_date, stake_level, max_devices, email or None, notes or None))
+        
         db.commit()
         db.close()
         
-        log_action('添加用户', email, f'有效期: {duration}天, SL: {stake_level}')
+        log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
-        return jsonify({'success': True})
+        session['message'] = f'✅ License 创建成功！Key: {license_key}'
+        session['message_type'] = 'success'
         
-    except psycopg2.IntegrityError:
-        return jsonify({'success': False, 'error': '该邮箱已存在'}), 400
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        session['message'] = f'❌ 创建失败: {str(e)}'
+        session['message_type'] = 'error'
+    
+    return redirect(url_for('index'))
 
-@app.route('/api/extend_license', methods=['POST'])
-def api_extend_license():
-    """延长许可证"""
-    if 'logged_in' not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+@app.route('/extend', methods=['POST'])
+def extend_license():
+    """延长 License"""
+    if 'admin' not in session:
+        return redirect(url_for('login'))
     
     try:
-        data = request.json
-        user_id = data.get('id')
-        days = float(data.get('days', 30))
+        license_key = request.form.get('license_key')
         
         db = get_db()
         cursor = db.cursor()
-        
-        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
-        user = cursor.fetchone()
-        
-        if not user:
-            return jsonify({'success': False, 'error': '用户不存在'}), 404
         
         cursor.execute('''
             UPDATE licenses 
-            SET expiry_date = expiry_date + INTERVAL '%s days',
-                is_active = TRUE
-            WHERE id = %s
-        ''', (days, user_id))
+            SET expiry_date = expiry_date + INTERVAL '30 days'
+            WHERE license_key = %s
+        ''', (license_key,))
+        
         db.commit()
         db.close()
         
-        log_action('延长许可证', user['email'], f'+{days}天')
+        log_action('延长 License', license_key, '延长 30 天')
         
-        return jsonify({'success': True})
+        session['message'] = f'✅ {license_key} 已延长 30 天'
+        session['message_type'] = 'success'
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        session['message'] = f'❌ 延长失败: {str(e)}'
+        session['message_type'] = 'error'
+    
+    return redirect(url_for('index'))
 
-@app.route('/api/update_expiry', methods=['POST'])
-def api_update_expiry():
-    """修改到期时间"""
-    if 'logged_in' not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+@app.route('/reset-hwid', methods=['POST'])
+def reset_hwid():
+    """重置 HWID"""
+    if 'admin' not in session:
+        return redirect(url_for('login'))
     
     try:
-        data = request.json
-        user_id = data.get('id')
-        datetime_str = data.get('datetime')
+        license_key = request.form.get('license_key')
         
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
-        user = cursor.fetchone()
+        cursor.execute('''
+            UPDATE licenses 
+            SET hwid = NULL
+            WHERE license_key = %s
+        ''', (license_key,))
         
-        cursor.execute('UPDATE licenses SET expiry_date = %s WHERE id = %s', (datetime_str, user_id))
         db.commit()
         db.close()
         
-        log_action('修改到期时间', user['email'], f'新时间: {datetime_str}')
+        log_action('重置 HWID', license_key, '已解绑设备')
         
-        return jsonify({'success': True})
+        session['message'] = f'✅ {license_key} 的 HWID 已重置'
+        session['message_type'] = 'success'
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        session['message'] = f'❌ 重置失败: {str(e)}'
+        session['message_type'] = 'error'
+    
+    return redirect(url_for('index'))
 
-@app.route('/api/reset_mac', methods=['POST'])
-def api_reset_mac():
-    """重置 MAC 地址"""
-    if 'logged_in' not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+@app.route('/delete', methods=['POST'])
+def delete_license():
+    """删除 License"""
+    if 'admin' not in session:
+        return redirect(url_for('login'))
     
     try:
-        data = request.json
-        user_id = data.get('id')
+        license_key = request.form.get('license_key')
         
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute('SELECT email, mac_address FROM licenses WHERE id = %s', (user_id,))
-        user = cursor.fetchone()
+        cursor.execute('DELETE FROM licenses WHERE license_key = %s', (license_key,))
         
-        cursor.execute('UPDATE licenses SET mac_address = NULL WHERE id = %s', (user_id,))
         db.commit()
         db.close()
         
-        log_action('重置MAC地址', user['email'], f'旧MAC: {user["mac_address"]}')
+        log_action('删除 License', license_key, '已删除')
         
-        return jsonify({'success': True})
+        session['message'] = f'✅ {license_key} 已删除'
+        session['message_type'] = 'success'
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/delete_user', methods=['POST'])
-def api_delete_user():
-    """删除用户"""
-    if 'logged_in' not in session:
-        return jsonify({'success': False, 'error': '未登录'}), 401
+        session['message'] = f'❌ 删除失败: {str(e)}'
+        session['message_type'] = 'error'
     
-    try:
-        data = request.json
-        user_id = data.get('id')
-        
-        db = get_db()
-        cursor = db.cursor()
-        
-        cursor.execute('SELECT email FROM licenses WHERE id = %s', (user_id,))
-        user = cursor.fetchone()
-        
-        cursor.execute('DELETE FROM licenses WHERE id = %s', (user_id,))
-        db.commit()
-        db.close()
-        
-        log_action('删除用户', user['email'])
-        
-        return jsonify({'success': True})
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    return redirect(url_for('index'))
+
+# ============================================
+# 健康检查
+# ============================================
 
 @app.route('/health')
 def health():
     """健康检查"""
-    return jsonify({'status': 'ok', 'database': 'PostgreSQL'}), 200
+    return jsonify({'status': 'ok', 'timestamp': datetime.now(timezone.utc).isoformat()}), 200
 
 @app.route('/init-db')
 def init_db_route():
-    """初始化数据库（仅首次使用）"""
+    """初始化数据库（首次部署）"""
     try:
         init_db()
-        return jsonify({'success': True, 'message': '数据库初始化成功！'}), 200
+        return '✅ 数据库初始化成功！', 200
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return f'❌ 初始化失败: {str(e)}', 500
 
-@app.route('/migrate-db')
-def migrate_db_route():
-    """迁移数据库（添加新字段）"""
-    try:
-        db = get_db()
-        cursor = db.cursor()
-        
-        # 添加 stake_level 列（如果不存在）
-        cursor.execute('''
-            ALTER TABLE licenses
-            ADD COLUMN IF NOT EXISTS stake_level INTEGER DEFAULT 25
-        ''')
-        
-        db.commit()
-        db.close()
-        
-        return jsonify({'success': True, 'message': '数据库迁移成功！已添加 stake_level 字段'}), 200
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+# ============================================
+# 启动服务器
+# ============================================
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("🔐 GTO 许可证管理系统 - PostgreSQL 版本")
-    print("=" * 60)
-    print("")
+    print('')
+    print('=' * 60)
+    print('🚀 GTO 服务器 - License Key 系统')
+    print('=' * 60)
+    print('')
+    print('📡 功能：')
+    print('   • License Key 验证 (/api/verify)')
+    print('   • GTO API 模拟 (/api/versions, /api/auth/local, etc.)')
+    print('   • Socket.IO WebSocket (/, /rtd, /home)')
+    print('   • Dashboard 管理界面 (/)')
+    print('')
+    print('🔧 首次部署请访问: /init-db')
+    print('')
     
-    # 初始化数据库
-    try:
-        print("📊 初始化数据库...")
-        init_db()
-    except Exception as e:
-        print(f"❌ 数据库初始化失败: {e}")
-        print("⚠️  请确保 DATABASE_URL 环境变量已设置")
-    
-    # Railway 需要使用 $PORT 环境变量
-    port = int(os.getenv('PORT', 8000))
-    
-    print(f"📊 Dashboard: http://0.0.0.0:{port}")
-    print(f"🔌 API端点: http://0.0.0.0:{port}/api/verify")
-    print("🔑 管理员密码: SW1024sw..")
-    print("🐘 数据库: PostgreSQL")
-    print("")
-    print("⚠️  按 Ctrl+C 停止服务器")
-    print("=" * 60)
-    print("")
-    
-    app.run(host='0.0.0.0', port=port, debug=False)
+    port = int(os.getenv('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False)
