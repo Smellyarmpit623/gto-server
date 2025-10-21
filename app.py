@@ -52,6 +52,7 @@ def init_db():
             license_key VARCHAR(50) NOT NULL UNIQUE,
             hwid VARCHAR(100),
             email VARCHAR(255),
+            ggid VARCHAR(100),
             expiry_date TIMESTAMP NOT NULL,
             stake_level INTEGER DEFAULT 25,
             max_devices INTEGER DEFAULT 1,
@@ -376,12 +377,33 @@ def api_versions():
 
 @app.route('/api/auth/local', methods=['POST', 'OPTIONS'])
 def api_auth():
-    """模拟登录 - 完整字段"""
+    """模拟登录 - 根据 License Key 动态返回 Stake Level"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     data = request.json or {}
     email = data.get('email', 'wwe6hb9ij2eip7le@gmail.com')
+    
+    # 获取 License Key（从请求头或请求体）
+    license_key = request.headers.get('X-License-Key') or data.get('license_key')
+    
+    # 默认 Stake Level
+    stake_level = 50
+    ggid = None
+    
+    # 如果提供了 License Key，从数据库查询
+    if license_key:
+        try:
+            db = get_db()
+            cursor = db.cursor()
+            cursor.execute('SELECT stake_level, ggid FROM licenses WHERE license_key = %s', (license_key,))
+            result = cursor.fetchone()
+            if result:
+                stake_level = result['stake_level'] or 50
+                ggid = result.get('ggid')
+            db.close()
+        except Exception as e:
+            print(f'[ERROR] 查询 License 失败: {e}')
     
     # 固定的假 JWT（与原版一致）
     fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NDcxLCJpYXQiOjE3NjA5NDQ3ODEsImV4cCI6MTc2MTU0OTU4MX0.VGeIpOoNMCh20rHgOT-1SGr23Chce8S1b73hBc170k4"
@@ -400,13 +422,13 @@ def api_auth():
             "userPlan": "Pro",
             "nickname": "WWE6HB9IJ2EIP7LE",
             "is_adat": False,
-            "stakes_level": 50,
+            "stakes_level": stake_level,
             "gas": 0,
             "game_types": ["cash"],
             "createdAt": "2025-09-28T05:53:16.997Z",
             "updatedAt": "2025-10-20T06:44:16.129Z",
             "max_devices": None,
-            "gg_nickname": None,
+            "gg_nickname": ggid,
             "enable_recording": False,
             "settlement": "day",
             "minutes": 0,
@@ -416,9 +438,30 @@ def api_auth():
 
 @app.route('/users/me', methods=['GET', 'OPTIONS'])
 def users_me():
-    """模拟用户信息 - 完整字段"""
+    """模拟用户信息 - 根据 License Key 动态返回 Stake Level"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    
+    # 获取 License Key（从请求头或查询参数）
+    license_key = request.headers.get('X-License-Key') or request.args.get('license_key')
+    
+    # 默认 Stake Level
+    stake_level = 50
+    ggid = None
+    
+    # 如果提供了 License Key，从数据库查询
+    if license_key:
+        try:
+            db = get_db()
+            cursor = db.cursor()
+            cursor.execute('SELECT stake_level, ggid FROM licenses WHERE license_key = %s', (license_key,))
+            result = cursor.fetchone()
+            if result:
+                stake_level = result['stake_level'] or 50
+                ggid = result.get('ggid')
+            db.close()
+        except Exception as e:
+            print(f'[ERROR] 查询 License 失败: {e}')
     
     return jsonify({
         "id": 471,
@@ -432,13 +475,13 @@ def users_me():
         "userPlan": "Pro",
         "nickname": "WWE6HB9IJ2EIP7LE",
         "is_adat": False,
-        "stakes_level": 50,
+        "stakes_level": stake_level,
         "gas": 0,
         "game_types": ["cash"],
         "createdAt": "2025-09-28T05:53:16.997Z",
         "updatedAt": "2025-10-20T06:44:16.129Z",
         "max_devices": None,
-        "gg_nickname": None,
+        "gg_nickname": ggid,
         "enable_recording": False,
         "settlement": "day",
         "minutes": 0,
@@ -866,6 +909,10 @@ DASHBOARD_HTML = '''
                         <input type="email" name="email" placeholder="user@example.com">
                     </div>
                     <div class="form-group">
+                        <label>GGID（可选）</label>
+                        <input type="text" name="ggid" placeholder="用户的 GG ID">
+                    </div>
+                    <div class="form-group">
                         <label>备注（可选）</label>
                         <textarea name="notes" rows="3" placeholder="备注信息..."></textarea>
                     </div>
@@ -1049,7 +1096,10 @@ def index():
         # 统计
         now = datetime.now(timezone.utc)
         total = len(licenses)
-        active = sum(1 for lic in licenses if lic['is_active'] and lic['expiry_date'].replace(tzinfo=timezone.utc) > now)
+        # 确保时区一致性
+        active = sum(1 for lic in licenses if lic['is_active'] and 
+                     (lic['expiry_date'].replace(tzinfo=timezone.utc) if lic['expiry_date'].tzinfo is None 
+                      else lic['expiry_date']) > now)
         expired = total - active
         
         # 今日使用
@@ -1121,6 +1171,7 @@ def create_license():
         stake_level = int(request.form.get('stake_level', 25))
         max_devices = int(request.form.get('max_devices', 1))
         email = request.form.get('email', '').strip()
+        ggid = request.form.get('ggid', '').strip()
         notes = request.form.get('notes', '').strip()
         
         # 生成 License Key
@@ -1131,9 +1182,9 @@ def create_license():
         cursor = db.cursor()
         
         cursor.execute('''
-            INSERT INTO licenses (license_key, expiry_date, stake_level, max_devices, email, notes)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (license_key, expiry_date, stake_level, max_devices, email or None, notes or None))
+            INSERT INTO licenses (license_key, expiry_date, stake_level, max_devices, email, ggid, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
         
         db.commit()
         db.close()
@@ -1258,6 +1309,32 @@ def init_db_route():
         return '✅ 数据库初始化成功！', 200
     except Exception as e:
         return f'❌ 初始化失败: {str(e)}', 500
+
+@app.route('/migrate-ggid')
+def migrate_ggid():
+    """迁移：添加 GGID 字段"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # 检查列是否存在
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='licenses' AND column_name='ggid'
+        """)
+        
+        if not cursor.fetchone():
+            cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
+            db.commit()
+            db.close()
+            return '✅ GGID 字段添加成功！', 200
+        else:
+            db.close()
+            return '⚠️  GGID 字段已存在', 200
+            
+    except Exception as e:
+        return f'❌ 迁移失败: {str(e)}', 500
 
 # ============================================
 # 启动服务器
