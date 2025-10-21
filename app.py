@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 GTO 服务器 - License Key 系统 + GTO API 模拟 + Socket.IO
@@ -1119,8 +1119,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, notes or None))
         
-                db.commit()
-                db.close()
+        db.commit()
+        db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
