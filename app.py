@@ -238,85 +238,240 @@ def get_config(license_key):
 
 @app.route('/api/versions', methods=['GET', 'OPTIONS'])
 def api_versions():
-    """模拟版本检查"""
+    """模拟版本检查 - 完整字段"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     return jsonify({
         "data": [
             {
-                "id": 1,
+                "id": 49,
                 "attributes": {
-                    "version": "137.5.0",
-                    "released_at": "2024-01-01T00:00:00Z",
-                    "required": False,
-                    "changelog": "Pro version enabled"
+                    "gui_version": "135.3.0",
+                    "core_version": "135.2.0",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/135.2.0/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
+                    "changelog": None,
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-09-16T02:51:08.936Z",
+                    "updatedAt": "2025-09-16T02:51:08.936Z",
+                    "type": "tygto",
+                    "published": None,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 50,
+                "attributes": {
+                    "gui_version": "137.4.1",
+                    "core_version": "10.1.8",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/10.1.8/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
+                    "changelog": None,
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-09-18T09:30:02.242Z",
+                    "updatedAt": "2025-09-22T03:15:18.242Z",
+                    "type": "tygto",
+                    "published": None,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 51,
+                "attributes": {
+                    "gui_version": "137.5.0",
+                    "core_version": "10.1.8",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/10.1.8/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
+                    "changelog": "1.Preflop strategies now support stack depth matching with new depth options: 50BB, 60BB, 70BB, 80BB, 150BB, and 200BB\\n2.Fixed position recognition error in NLH mode",
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-09-22T09:34:43.607Z",
+                    "updatedAt": "2025-09-22T10:15:15.191Z",
+                    "type": "tygto",
+                    "published": True,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 9,
+                "attributes": {
+                    "gui_version": "8.2.0",
+                    "core_version": "8.6.29",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/8.6.29/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/8.0.0/res.zip",
+                    "changelog": None,
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-02-10T16:38:39.524Z",
+                    "updatedAt": "2025-10-04T17:51:31.265Z",
+                    "type": "nutsgto",
+                    "published": True,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 47,
+                "attributes": {
+                    "gui_version": "137.0.2",
+                    "core_version": "10.0.14",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/10.0.14/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
+                    "changelog": "This version introduces 8 built-in GTOWizard preflop strategies that automatically adapt to opponents' opening sizes. TYGTO now automatically selects the appropriate preflop range based on your opponent's open sizing.",
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-08-03T12:46:49.490Z",
+                    "updatedAt": "2025-08-07T06:13:00.829Z",
+                    "type": "tygto",
+                    "published": True,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 45,
+                "attributes": {
+                    "gui_version": "135.0.0",
+                    "core_version": "135.1.1",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/135.1.1/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/2.0.7/res.zip",
+                    "changelog": None,
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-07-22T05:26:39.447Z",
+                    "updatedAt": "2025-08-15T23:58:40.463Z",
+                    "type": "tygto",
+                    "published": None,
+                    "is_minimum_version": None
+                }
+            },
+            {
+                "id": 48,
+                "attributes": {
+                    "gui_version": "137.4.0",
+                    "core_version": "10.0.14",
+                    "core_url": "https://s3.ggpk.quest/v11/ace/10.0.14/chrome.zip",
+                    "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
+                    "changelog": "Added Simplified Chinese and Traditional Chinese language support",
+                    "changelog_cn": None,
+                    "spingo_url": None,
+                    "createdAt": "2025-09-15T11:57:38.965Z",
+                    "updatedAt": "2025-09-15T11:57:38.965Z",
+                    "type": "tygto",
+                    "published": True,
+                    "is_minimum_version": None
                 }
             }
         ],
         "meta": {
-            "total": 1,
-            "current_version": "137.5.0"
+            "pagination": {
+                "page": 1,
+                "pageSize": 25,
+                "pageCount": 1,
+                "total": 7
+            }
         }
     }), 200
 
 @app.route('/api/auth/local', methods=['POST', 'OPTIONS'])
 def api_auth():
-    """模拟登录"""
+    """模拟登录 - 完整字段"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     data = request.json or {}
-    email = data.get('email', 'pro@gto.local')
+    email = data.get('email', 'wwe6hb9ij2eip7le@gmail.com')
     
-    # 生成假 JWT
-    fake_jwt = f"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.{secrets.token_urlsafe(32)}"
+    # 固定的假 JWT（与原版一致）
+    fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NDcxLCJpYXQiOjE3NjA5NDQ3ODEsImV4cCI6MTc2MTU0OTU4MX0.VGeIpOoNMCh20rHgOT-1SGr23Chce8S1b73hBc170k4"
     
     return jsonify({
-        "data": {
-            "token": fake_jwt,
-            "user": {
-                "id": 1,
-                "email": email,
-                "username": "Pro User",
-                "plan": "Pro",
-                "isPro": True,
-                "stakes_level": 50
-            }
+        "jwt": fake_jwt,
+        "user": {
+            "id": 471,
+            "username": "WWE6HB9IJ2EIP7LE",
+            "email": email,
+            "provider": "local",
+            "confirmed": True,
+            "blocked": False,
+            "expired_at": None,
+            "plan": "Pro",
+            "userPlan": "Pro",
+            "nickname": "WWE6HB9IJ2EIP7LE",
+            "is_adat": False,
+            "stakes_level": 50,
+            "gas": 0,
+            "game_types": ["cash"],
+            "createdAt": "2025-09-28T05:53:16.997Z",
+            "updatedAt": "2025-10-20T06:44:16.129Z",
+            "max_devices": None,
+            "gg_nickname": None,
+            "enable_recording": False,
+            "settlement": "day",
+            "minutes": 0,
+            "isPro": True
         }
     }), 200
 
 @app.route('/users/me', methods=['GET', 'OPTIONS'])
 def users_me():
-    """模拟用户信息"""
+    """模拟用户信息 - 完整字段"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     return jsonify({
-        "data": {
-            "id": 1,
-            "email": "pro@gto.local",
-            "username": "Pro User",
-            "plan": "Pro",
-            "isPro": True,
-            "stakes_level": 50,
-            "expired_at": None
-        }
+        "id": 471,
+        "username": "WWE6HB9IJ2EIP7LE",
+        "email": "wwe6hb9ij2eip7le@gmail.com",
+        "provider": "local",
+        "confirmed": True,
+        "blocked": False,
+        "expired_at": None,
+        "plan": "Pro",
+        "userPlan": "Pro",
+        "nickname": "WWE6HB9IJ2EIP7LE",
+        "is_adat": False,
+        "stakes_level": 50,
+        "gas": 0,
+        "game_types": ["cash"],
+        "createdAt": "2025-09-28T05:53:16.997Z",
+        "updatedAt": "2025-10-20T06:44:16.129Z",
+        "max_devices": None,
+        "gg_nickname": None,
+        "enable_recording": False,
+        "settlement": "day",
+        "minutes": 0,
+        "isPro": True
     }), 200
 
-@app.route('/appconfig.json', methods=['GET'])
+@app.route('/appconfig.json', methods=['GET', 'OPTIONS'])
 def appconfig():
-    """模拟应用配置"""
+    """模拟应用配置 - 完整字段"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
     return jsonify({
-        "version": "137.5.0",
-        "features": {
-            "pro": True,
-            "gto": True,
-            "solver": True
-        },
-        "limits": {
-            "stakes_level": 50
-        }
+        "server_status": "",
+        "postflop_status": "",
+        "game_modes": [
+            {
+                "code": "rush",
+                "value": "Rush & Cash",
+                "label": "Rush & Cash",
+                "type": "cash",
+                "max": 6,
+                "available": True
+            },
+            {
+                "code": "nlh",
+                "value": "NLH",
+                "label": "NLH 6max",
+                "type": "cash",
+                "max": 6,
+                "available": True
+            }
+        ]
     }), 200
 
 # ============================================
@@ -609,7 +764,7 @@ DASHBOARD_HTML = '''
             {{ message }}
         </div>
         {% endif %}
-
+        
         <div class="stats">
             <div class="stat-card">
                 <h3>总 License 数</h3>
@@ -628,30 +783,30 @@ DASHBOARD_HTML = '''
                 <div class="number">{{ stats.today_usage }}</div>
             </div>
         </div>
-
+        
         <div class="main-content">
             <div class="tabs">
                 <button class="tab active" onclick="switchTab('licenses')">License 管理</button>
                 <button class="tab" onclick="switchTab('create')">生成 License</button>
                 <button class="tab" onclick="switchTab('logs')">操作日志</button>
-            </div>
-
+        </div>
+        
             <!-- License 列表 -->
             <div id="licenses" class="tab-content active">
                 <h2 class="section-title">License 列表</h2>
-                <table>
-                    <thead>
-                        <tr>
+            <table>
+                <thead>
+                    <tr>
                             <th>License Key</th>
                             <th>HWID</th>
-                            <th>到期时间</th>
+                        <th>到期时间</th>
                             <th>Stake Level</th>
                             <th>最后使用</th>
-                            <th>状态</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
                         {% for lic in licenses %}
                         <tr>
                             <td><code>{{ lic.license_key }}</code></td>
@@ -662,10 +817,10 @@ DASHBOARD_HTML = '''
                             <td>
                                 {% if lic.is_active and lic.expiry_date > now %}
                                 <span class="status-active">✅ 激活</span>
-                                {% else %}
+                            {% else %}
                                 <span class="status-expired">❌ 过期</span>
-                                {% endif %}
-                            </td>
+                            {% endif %}
+                        </td>
                             <td>
                                 <div class="action-buttons">
                                     <form method="POST" action="/extend" style="display:inline;">
@@ -681,13 +836,13 @@ DASHBOARD_HTML = '''
                                         <button type="submit" class="btn btn-danger" onclick="return confirm('确定删除？')">删除</button>
                                     </form>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
             <!-- 生成 License -->
             <div id="create" class="tab-content">
                 <h2 class="section-title">生成新 License</h2>
@@ -721,30 +876,30 @@ DASHBOARD_HTML = '''
             <!-- 操作日志 -->
             <div id="logs" class="tab-content">
                 <h2 class="section-title">操作日志</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>时间</th>
-                            <th>操作</th>
+            <table>
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>操作</th>
                             <th>License Key</th>
-                            <th>详情</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for log in logs %}
-                        <tr>
+                        <th>详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
                             <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                            <td>{{ log.action }}</td>
+                        <td>{{ log.action }}</td>
                             <td><code>{{ log.target_key }}</code></td>
                             <td><small>{{ log.details }}</small></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             </div>
         </div>
     </div>
-
+    
     <script>
         function switchTab(tabName) {
             // 隐藏所有内容
@@ -755,7 +910,7 @@ DASHBOARD_HTML = '''
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
-
+        
         function logout() {
             if (confirm('确定退出登录？')) {
                 window.location.href = '/logout';
@@ -896,8 +1051,8 @@ def index():
         
         # 操作日志
         cursor.execute('''
-            SELECT * FROM admin_logs 
-            ORDER BY timestamp DESC 
+            SELECT * FROM admin_logs
+            ORDER BY timestamp DESC
             LIMIT 50
         ''')
         logs = cursor.fetchall()
@@ -964,8 +1119,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, notes or None))
         
-        db.commit()
-        db.close()
+                db.commit()
+                db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
