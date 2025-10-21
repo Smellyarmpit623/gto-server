@@ -1033,9 +1033,10 @@ def index():
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_name = 'licenses'
-            )
+            ) AS exists_table
         """)
-        if not cursor.fetchone()[0]:
+        exists_table = cursor.fetchone()
+        if not exists_table or not exists_table.get('exists_table'):
             return '<h1>⚠️ 数据库未初始化</h1><p>请访问 <a href="/init-db">/init-db</a> 初始化数据库</p>', 503
         
         # 获取所有 License
@@ -1053,12 +1054,12 @@ def index():
         
         # 今日使用
         cursor.execute('''
-            SELECT COUNT(DISTINCT license_key) 
+            SELECT COUNT(DISTINCT license_key) AS today_total
             FROM usage_stats 
             WHERE DATE(timestamp) = CURRENT_DATE
         ''')
         result = cursor.fetchone()
-        today_usage = result[0] if result and result[0] is not None else 0
+        today_usage = result['today_total'] if result and result.get('today_total') is not None else 0
         
         # 操作日志
         cursor.execute('''
