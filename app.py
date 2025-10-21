@@ -1028,6 +1028,16 @@ def index():
         db = get_db()
         cursor = db.cursor()
         
+        # 确保表存在（防御性编程）
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'licenses'
+            )
+        """)
+        if not cursor.fetchone()[0]:
+            return '<h1>⚠️ 数据库未初始化</h1><p>请访问 <a href="/init-db">/init-db</a> 初始化数据库</p>', 503
+        
         # 获取所有 License
         cursor.execute('''
             SELECT * FROM licenses 
@@ -1047,7 +1057,8 @@ def index():
             FROM usage_stats 
             WHERE DATE(timestamp) = CURRENT_DATE
         ''')
-        today_usage = cursor.fetchone()[0] or 0
+        result = cursor.fetchone()
+        today_usage = result[0] if result and result[0] is not None else 0
         
         # 操作日志
         cursor.execute('''
@@ -1074,7 +1085,11 @@ def index():
         )
         
     except Exception as e:
-        return f'数据库错误: {str(e)}', 500
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f'[ERROR] Dashboard 错误: {str(e)}')
+        print(error_detail)
+        return f'<h1>数据库错误</h1><pre>{str(e)}</pre><pre>{error_detail}</pre>', 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
