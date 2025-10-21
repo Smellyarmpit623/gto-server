@@ -890,6 +890,15 @@ def health():
     """健康检查"""
     return jsonify({'status': 'ok', 'database': 'PostgreSQL'}), 200
 
+@app.route('/init-db')
+def init_db_route():
+    """初始化数据库（仅首次使用）"""
+    try:
+        init_db()
+        return jsonify({'success': True, 'message': '数据库初始化成功！'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 if __name__ == '__main__':
     print("=" * 60)
     print("🔐 GTO 许可证管理系统 - PostgreSQL 版本")
