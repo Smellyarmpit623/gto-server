@@ -1091,15 +1091,25 @@ def index():
             SELECT * FROM licenses 
             ORDER BY created_at DESC
         ''')
-        licenses = cursor.fetchall()
+        licenses_raw = cursor.fetchall()
+        
+        # 确保所有 datetime 字段都有时区信息（为模板准备）
+        licenses = []
+        for lic in licenses_raw:
+            lic_dict = dict(lic)
+            # 给所有 datetime 字段添加 UTC 时区
+            if lic_dict.get('expiry_date') and lic_dict['expiry_date'].tzinfo is None:
+                lic_dict['expiry_date'] = lic_dict['expiry_date'].replace(tzinfo=timezone.utc)
+            if lic_dict.get('created_at') and lic_dict['created_at'].tzinfo is None:
+                lic_dict['created_at'] = lic_dict['created_at'].replace(tzinfo=timezone.utc)
+            if lic_dict.get('last_used') and lic_dict['last_used'].tzinfo is None:
+                lic_dict['last_used'] = lic_dict['last_used'].replace(tzinfo=timezone.utc)
+            licenses.append(lic_dict)
         
         # 统计
         now = datetime.now(timezone.utc)
         total = len(licenses)
-        # 确保时区一致性
-        active = sum(1 for lic in licenses if lic['is_active'] and 
-                     (lic['expiry_date'].replace(tzinfo=timezone.utc) if lic['expiry_date'].tzinfo is None 
-                      else lic['expiry_date']) > now)
+        active = sum(1 for lic in licenses if lic['is_active'] and lic['expiry_date'] > now)
         expired = total - active
         
         # 今日使用
@@ -1117,7 +1127,15 @@ def index():
             ORDER BY timestamp DESC
             LIMIT 50
         ''')
-        logs = cursor.fetchall()
+        logs_raw = cursor.fetchall()
+        
+        # 确保 logs 的时区信息
+        logs = []
+        for log in logs_raw:
+            log_dict = dict(log)
+            if log_dict.get('timestamp') and log_dict['timestamp'].tzinfo is None:
+                log_dict['timestamp'] = log_dict['timestamp'].replace(tzinfo=timezone.utc)
+            logs.append(log_dict)
         
         db.close()
         
@@ -1186,8 +1204,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
         
-        db.commit()
-        db.close()
+                db.commit()
+                db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
@@ -1326,13 +1344,13 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-            db.commit()
-            db.close()
+        db.commit()
+        db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
             return '⚠️  GGID 字段已存在', 200
-            
+        
     except Exception as e:
         return f'❌ 迁移失败: {str(e)}', 500
 
