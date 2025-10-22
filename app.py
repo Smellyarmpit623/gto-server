@@ -377,42 +377,186 @@ def api_versions():
 
 @app.route('/api/auth/local', methods=['POST', 'OPTIONS'])
 def api_auth():
-    """模拟登录 - 根据 License Key 动态返回 Stake Level"""
+    """模拟登录 - 验证 License Key 和 HWID"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
     data = request.json or {}
-    email = data.get('email', 'wwe6hb9ij2eip7le@gmail.com')
     
-    # 获取 License Key（从请求头或请求体）
+    # 获取 License Key 和 HWID
     license_key = request.headers.get('X-License-Key') or data.get('license_key')
+    hwid = request.headers.get('X-HWID') or data.get('hwid')
     
-    # 默认 Stake Level
-    stake_level = 50
-    ggid = None
+    # 必须提供 License Key
+    if not license_key:
+        return jsonify({"error": "License Key is required"}), 401
     
-    # 如果提供了 License Key，从数据库查询
-    if license_key:
-        try:
-            db = get_db()
-            cursor = db.cursor()
-            cursor.execute('SELECT stake_level, ggid FROM licenses WHERE license_key = %s', (license_key,))
-            result = cursor.fetchone()
-            if result:
-                stake_level = result['stake_level'] or 50
-                ggid = result.get('ggid')
-            db.close()
-        except Exception as e:
-            print(f'[ERROR] 查询 License 失败: {e}')
+    # 从数据库查询 License
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('''
+            SELECT hwid, stake_level, ggid, expires_at 
+            FROM licenses 
+            WHERE license_key = %s
+        ''', (license_key,))
+        result = cursor.fetchone()
+        db.close()
+        
+        # License Key 不存在
+        if not result:
+            print(f'[AUTH] ❌ License Key 不存在: {license_key}')
+            return jsonify({"error": "Invalid License Key"}), 401
+        
+        # 检查是否过期
+        if result['expires_at']:
+            expires_at = result['expires_at']
+            # 确保 expires_at 是 offset-aware
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expires_at:
+                print(f'[AUTH] ❌ License 已过期: {license_key}')
+                return jsonify({"error": "License expired"}), 401
+        
+        # 验证 HWID（如果数据库中已绑定）
+        db_hwid = result.get('hwid')
+        if db_hwid:
+            # 如果数据库中有 HWID，必须匹配
+            if not hwid:
+                print(f'[AUTH] ❌ 缺少 HWID: {license_key}')
+                return jsonify({"error": "HWID is required"}), 401
+            if hwid != db_hwid:
+                print(f'[AUTH] ❌ HWID 不匹配: {license_key} (期望: {db_hwid}, 实际: {hwid})')
+                return jsonify({"error": "HWID mismatch"}), 403
+        else:
+            # 如果数据库中没有 HWID，自动绑定
+            if hwid:
+                try:
+                    db = get_db()
+                    cursor = db.cursor()
+                    cursor.execute('UPDATE licenses SET hwid = %s WHERE license_key = %s', (hwid, license_key))
+                    db.commit()
+                    db.close()
+                    print(f'[AUTH] ✅ HWID 已绑定: {license_key} → {hwid}')
+                except Exception as e:
+                    print(f'[AUTH] ⚠️  HWID 绑定失败: {e}')
+        
+        # 验证通过，返回用户信息
+        # username 和 nickname 直接用 License Key
+        username = license_key
+        nickname = license_key
+        # email = License Key + @gmail.com
+        email = f"{license_key}@gmail.com"
+        # stake_level 从数据库读取，默认 25
+        stake_level = result.get('stake_level') or 25
+        # ggid 从数据库读取（如果有）
+        ggid = result.get('ggid')
+        
+        print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid})')
+        
+        # 固定的假 JWT（与原版一致）
+        fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NDcxLCJpYXQiOjE3NjA5NDQ3ODEsImV4cCI6MTc2MTU0OTU4MX0.VGeIpOoNMCh20rHgOT-1SGr23Chce8S1b73hBc170k4"
+        
+        return jsonify({
+            "jwt": fake_jwt,
+            "user": {
+                "id": 471,
+                "username": username,
+                "email": email,
+                "provider": "local",
+                "confirmed": True,
+                "blocked": False,
+                "expired_at": None,
+                "plan": "Pro",
+                "userPlan": "Pro",
+                "nickname": nickname,
+                "is_adat": False,
+                "stakes_level": stake_level,
+                "gas": 0,
+                "game_types": ["cash"],
+                "createdAt": "2025-09-28T05:53:16.997Z",
+                "updatedAt": "2025-10-20T06:44:16.129Z",
+                "max_devices": None,
+                "gg_nickname": ggid,
+                "enable_recording": False,
+                "settlement": "day",
+                "minutes": 0,
+                "isPro": True
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f'[AUTH] ❌ 数据库错误: {e}')
+        return jsonify({"error": "Database error"}), 500
+
+@app.route('/api/users/me', methods=['GET', 'OPTIONS'])
+def users_me():
+    """模拟用户信息 - 验证 License Key 和 HWID"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
     
-    # 固定的假 JWT（与原版一致）
-    fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NDcxLCJpYXQiOjE3NjA5NDQ3ODEsImV4cCI6MTc2MTU0OTU4MX0.VGeIpOoNMCh20rHgOT-1SGr23Chce8S1b73hBc170k4"
+    # 获取 License Key 和 HWID
+    license_key = request.headers.get('X-License-Key') or request.args.get('license_key')
+    hwid = request.headers.get('X-HWID') or request.args.get('hwid')
     
-    return jsonify({
-        "jwt": fake_jwt,
-        "user": {
+    # 必须提供 License Key
+    if not license_key:
+        return jsonify({"error": "License Key is required"}), 401
+    
+    # 从数据库查询 License
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute('''
+            SELECT hwid, stake_level, ggid, expires_at 
+            FROM licenses 
+            WHERE license_key = %s
+        ''', (license_key,))
+        result = cursor.fetchone()
+        db.close()
+        
+        # License Key 不存在
+        if not result:
+            print(f'[ME] ❌ License Key 不存在: {license_key}')
+            return jsonify({"error": "Invalid License Key"}), 401
+        
+        # 检查是否过期
+        if result['expires_at']:
+            expires_at = result['expires_at']
+            # 确保 expires_at 是 offset-aware
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expires_at:
+                print(f'[ME] ❌ License 已过期: {license_key}')
+                return jsonify({"error": "License expired"}), 401
+        
+        # 验证 HWID（如果数据库中已绑定）
+        db_hwid = result.get('hwid')
+        if db_hwid:
+            # 如果数据库中有 HWID，必须匹配
+            if not hwid:
+                print(f'[ME] ❌ 缺少 HWID: {license_key}')
+                return jsonify({"error": "HWID is required"}), 401
+            if hwid != db_hwid:
+                print(f'[ME] ❌ HWID 不匹配: {license_key} (期望: {db_hwid}, 实际: {hwid})')
+                return jsonify({"error": "HWID mismatch"}), 403
+        
+        # 验证通过，返回用户信息
+        # username 和 nickname 直接用 License Key
+        username = license_key
+        nickname = license_key
+        # email = License Key + @gmail.com
+        email = f"{license_key}@gmail.com"
+        # stake_level 从数据库读取，默认 25
+        stake_level = result.get('stake_level') or 25
+        # ggid 从数据库读取（如果有）
+        ggid = result.get('ggid')
+        
+        print(f'[ME] ✅ 用户信息获取成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid})')
+        
+        return jsonify({
             "id": 471,
-            "username": "WWE6HB9IJ2EIP7LE",
+            "username": username,
             "email": email,
             "provider": "local",
             "confirmed": True,
@@ -420,7 +564,7 @@ def api_auth():
             "expired_at": None,
             "plan": "Pro",
             "userPlan": "Pro",
-            "nickname": "WWE6HB9IJ2EIP7LE",
+            "nickname": nickname,
             "is_adat": False,
             "stakes_level": stake_level,
             "gas": 0,
@@ -433,60 +577,11 @@ def api_auth():
             "settlement": "day",
             "minutes": 0,
             "isPro": True
-        }
-    }), 200
-
-@app.route('/api/users/me', methods=['GET', 'OPTIONS'])
-def users_me():
-    """模拟用户信息 - 根据 License Key 动态返回 Stake Level"""
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    
-    # 获取 License Key（从请求头或查询参数）
-    license_key = request.headers.get('X-License-Key') or request.args.get('license_key')
-    
-    # 默认 Stake Level
-    stake_level = 50
-    ggid = None
-    
-    # 如果提供了 License Key，从数据库查询
-    if license_key:
-        try:
-            db = get_db()
-            cursor = db.cursor()
-            cursor.execute('SELECT stake_level, ggid FROM licenses WHERE license_key = %s', (license_key,))
-            result = cursor.fetchone()
-            if result:
-                stake_level = result['stake_level'] or 50
-                ggid = result.get('ggid')
-            db.close()
-        except Exception as e:
-            print(f'[ERROR] 查询 License 失败: {e}')
-    
-    return jsonify({
-        "id": 471,
-        "username": "WWE6HB9IJ2EIP7LE",
-        "email": "wwe6hb9ij2eip7le@gmail.com",
-        "provider": "local",
-        "confirmed": True,
-        "blocked": False,
-        "expired_at": None,
-        "plan": "Pro",
-        "userPlan": "Pro",
-        "nickname": "WWE6HB9IJ2EIP7LE",
-        "is_adat": False,
-        "stakes_level": stake_level,
-        "gas": 0,
-        "game_types": ["cash"],
-        "createdAt": "2025-09-28T05:53:16.997Z",
-        "updatedAt": "2025-10-20T06:44:16.129Z",
-        "max_devices": None,
-        "gg_nickname": ggid,
-        "enable_recording": False,
-        "settlement": "day",
-        "minutes": 0,
-        "isPro": True
-    }), 200
+        }), 200
+        
+    except Exception as e:
+        print(f'[ME] ❌ 数据库错误: {e}')
+        return jsonify({"error": "Database error"}), 500
 
 @app.route('/api/appconfig.json', methods=['GET', 'OPTIONS'])
 def appconfig():
@@ -1233,8 +1328,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
         
-        db.commit()
-        db.close()
+                db.commit()
+                db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
         
@@ -1373,8 +1468,8 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-            db.commit()
-            db.close()
+        db.commit()
+        db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
