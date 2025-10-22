@@ -5,7 +5,7 @@ GTO 服务器 - License Key 系统 + GTO API 模拟 + Socket.IO
 完整版：Dashboard + API + WebSocket
 """
 
-from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session, Response, stream_with_context
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -17,6 +17,7 @@ import hashlib
 import uuid
 import jwt
 import time
+import requests
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
@@ -541,7 +542,6 @@ def users_me():
         license_key = payload.get('license_key')
         username = payload.get('username')
         email = payload.get('email')
-        stake_level = payload.get('stake_level', 25)
         
         if not license_key:
             print('[ME] ❌ JWT 缺少 license_key')
@@ -1520,6 +1520,72 @@ def migrate_ggid():
         
     except Exception as e:
         return f'❌ 迁移失败: {str(e)}', 500
+
+# ============================================
+# 文件代理 - 从真实 S3 转发下载
+# ============================================
+
+# 真实的 S3 域名
+REAL_S3_DOMAIN = "s3.ggpk.quest"
+
+@app.route('/v11/<path:file_path>', methods=['GET'])
+def proxy_s3_files(file_path):
+    """代理 S3 文件下载 - 从真实链接转发"""
+    try:
+        # 构建真实的 S3 URL
+        real_url = f"https://{REAL_S3_DOMAIN}/v11/{file_path}"
+        
+        print(f'[PROXY] 📥 转发下载请求: {file_path}')
+        print(f'[PROXY] 🔗 真实 URL: {real_url}')
+        
+        # 发起请求到真实的 S3
+        s3_response = requests.get(real_url, stream=True, timeout=30)
+        
+        # 检查响应状态
+        if s3_response.status_code != 200:
+            print(f'[PROXY] ❌ S3 返回错误: {s3_response.status_code}')
+            return jsonify({"error": f"File not found on S3: {file_path}"}), s3_response.status_code
+        
+        # 获取文件大小
+        content_length = s3_response.headers.get('Content-Length', 'unknown')
+        content_type = s3_response.headers.get('Content-Type', 'application/octet-stream')
+        
+        print(f'[PROXY] ✅ 开始转发: {file_path} ({content_length} bytes, {content_type})')
+        
+        # 创建流式响应
+        def generate():
+            """流式传输文件内容"""
+            bytes_transferred = 0
+            for chunk in s3_response.iter_content(chunk_size=8192):
+                if chunk:
+                    bytes_transferred += len(chunk)
+                    yield chunk
+            print(f'[PROXY] ✅ 转发完成: {file_path} ({bytes_transferred} bytes)')
+        
+        # 构建响应头
+        headers = {
+            'Content-Type': content_type,
+            'Content-Disposition': s3_response.headers.get('Content-Disposition', f'attachment; filename="{file_path.split("/")[-1]}"'),
+        }
+        
+        if content_length != 'unknown':
+            headers['Content-Length'] = content_length
+        
+        return Response(
+            stream_with_context(generate()),
+            status=200,
+            headers=headers
+        )
+        
+    except requests.Timeout:
+        print(f'[PROXY] ❌ 请求超时: {file_path}')
+        return jsonify({"error": "Request timeout"}), 504
+    except requests.RequestException as e:
+        print(f'[PROXY] ❌ 请求失败: {e}')
+        return jsonify({"error": f"Proxy error: {str(e)}"}), 502
+    except Exception as e:
+        print(f'[PROXY] ❌ 服务器错误: {e}')
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 # ============================================
 # 启动服务器
