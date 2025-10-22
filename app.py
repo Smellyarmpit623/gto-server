@@ -513,68 +513,67 @@ def api_auth():
 
 @app.route('/api/users/me', methods=['GET', 'OPTIONS'])
 def users_me():
-    """模拟用户信息 - 验证 License Key 和 HWID"""
+    """获取用户信息 - 通过 JWT 验证"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     
-    # 获取 License Key 和 HWID
-    license_key = request.headers.get('X-License-Key') or request.args.get('license_key')
-    hwid = request.headers.get('X-HWID') or request.args.get('hwid')
+    # 从 Authorization header 中提取 JWT
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        print('[ME] ❌ 缺少 Authorization header 或格式错误')
+        return jsonify({"error": "Unauthorized"}), 401
     
-    # 必须提供 License Key
-    if not license_key:
-        return jsonify({"error": "License Key is required"}), 401
+    token = auth_header.replace('Bearer ', '').strip()
     
-    # 从数据库查询 License
     try:
+        # 解码并验证 JWT
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        
+        # 从 JWT 中提取信息
+        license_key = payload.get('license_key')
+        username = payload.get('username')
+        email = payload.get('email')
+        stake_level = payload.get('stake_level', 25)
+        
+        if not license_key:
+            print('[ME] ❌ JWT 缺少 license_key')
+            return jsonify({"error": "Invalid token"}), 401
+        
+        # 从数据库查询最新的 License 信息（确保未被删除或过期）
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            SELECT hwid, stake_level, ggid, expires_at 
+            SELECT hwid, stake_level, ggid, expiry_date, is_active
             FROM licenses 
             WHERE license_key = %s
         ''', (license_key,))
         result = cursor.fetchone()
         db.close()
         
-        # License Key 不存在
+        # License Key 不存在或已被删除
         if not result:
             print(f'[ME] ❌ License Key 不存在: {license_key}')
-            return jsonify({"error": "Invalid License Key"}), 401
+            return jsonify({"error": "License not found"}), 401
+        
+        # 检查是否激活
+        if not result.get('is_active'):
+            print(f'[ME] ❌ License 已停用: {license_key}')
+            return jsonify({"error": "License deactivated"}), 401
         
         # 检查是否过期
-        if result['expires_at']:
-            expires_at = result['expires_at']
-            # 确保 expires_at 是 offset-aware
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) > expires_at:
+        if result['expiry_date']:
+            expiry_date = result['expiry_date']
+            if expiry_date.tzinfo is None:
+                expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_date:
                 print(f'[ME] ❌ License 已过期: {license_key}')
                 return jsonify({"error": "License expired"}), 401
         
-        # 验证 HWID（如果数据库中已绑定）
-        db_hwid = result.get('hwid')
-        if db_hwid:
-            # 如果数据库中有 HWID，必须匹配
-            if not hwid:
-                print(f'[ME] ❌ 缺少 HWID: {license_key}')
-                return jsonify({"error": "HWID is required"}), 401
-            if hwid != db_hwid:
-                print(f'[ME] ❌ HWID 不匹配: {license_key} (期望: {db_hwid}, 实际: {hwid})')
-                return jsonify({"error": "HWID mismatch"}), 403
-        
-        # 验证通过，返回用户信息
-        # username 和 nickname 直接用 License Key
-        username = license_key
-        nickname = license_key
-        # email = License Key + @gmail.com
-        email = f"{license_key}@gmail.com"
-        # stake_level 从数据库读取，默认 25
-        stake_level = result.get('stake_level') or 25
-        # ggid 从数据库读取（如果有）
+        # 使用数据库中最新的 stake_level 和 ggid
+        db_stake_level = result.get('stake_level') or 25
         ggid = result.get('ggid')
         
-        print(f'[ME] ✅ 用户信息获取成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid})')
+        print(f'[ME] ✅ JWT 验证成功: {username} (Stake: {db_stake_level}, GGID: {ggid})')
         
         return jsonify({
             "id": 471,
@@ -586,9 +585,9 @@ def users_me():
             "expired_at": None,
             "plan": "Pro",
             "userPlan": "Pro",
-            "nickname": nickname,
+            "nickname": username,
             "is_adat": False,
-            "stakes_level": stake_level,
+            "stakes_level": db_stake_level,
             "gas": 0,
             "game_types": ["cash"],
             "createdAt": "2025-09-28T05:53:16.997Z",
@@ -601,9 +600,15 @@ def users_me():
             "isPro": True
         }), 200
         
+    except jwt.ExpiredSignatureError:
+        print('[ME] ❌ JWT 已过期')
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError as e:
+        print(f'[ME] ❌ JWT 验证失败: {e}')
+        return jsonify({"error": "Invalid token"}), 401
     except Exception as e:
-        print(f'[ME] ❌ 数据库错误: {e}')
-        return jsonify({"error": "Database error"}), 500
+        print(f'[ME] ❌ 服务器错误: {e}')
+        return jsonify({"error": "Server error"}), 500
 
 @app.route('/api/appconfig.json', methods=['GET', 'OPTIONS'])
 def appconfig():
