@@ -1319,6 +1319,35 @@ def health():
     """健康检查"""
     return jsonify({'status': 'ok', 'timestamp': datetime.now(timezone.utc).isoformat()}), 200
 
+# ============================================
+# 通配符路由 - 捕获所有未实现的 API 请求
+# ============================================
+
+@app.route('/api/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+def catch_all_api(path):
+    """捕获所有 API 请求，返回通用成功响应"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    # 记录请求
+    print(f'[CATCH-ALL] {request.method} /api/{path}')
+    print(f'[CATCH-ALL] Headers: {dict(request.headers)}')
+    if request.json:
+        print(f'[CATCH-ALL] Body: {request.json}')
+    
+    # 返回通用成功响应
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": 471,
+            "status": "ok",
+            "plan": "Pro",
+            "isPro": True,
+            "stakes_level": 50,
+            "message": "Request handled by catch-all route"
+        }
+    }), 200
+
 @app.route('/init-db')
 def init_db_route():
     """初始化数据库（首次部署）"""
