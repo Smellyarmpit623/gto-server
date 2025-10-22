@@ -15,6 +15,8 @@ import os
 import secrets
 import hashlib
 import uuid
+import jwt
+import time
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
@@ -25,6 +27,11 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # 管理员密码
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'SW1024sw..')
+
+# JWT 配置
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'gto-jwt-secret-key-2024-ultra-secure')
+JWT_ALGORITHM = 'HS256'
+JWT_EXPIRATION_DAYS = 7  # JWT 有效期（天）
 
 # PostgreSQL
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -454,11 +461,26 @@ def api_auth():
         
         print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid})')
         
-        # 固定的假 JWT（与原版一致）
-        fake_jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NDcxLCJpYXQiOjE3NjA5NDQ3ODEsImV4cCI6MTc2MTU0OTU4MX0.VGeIpOoNMCh20rHgOT-1SGr23Chce8S1b73hBc170k4"
+        # 生成真实的 JWT
+        iat = int(time.time())  # 签发时间
+        exp = iat + (JWT_EXPIRATION_DAYS * 24 * 60 * 60)  # 过期时间
+        
+        jwt_payload = {
+            "id": 471,  # 固定用户ID
+            "license_key": license_key,  # License Key
+            "username": username,
+            "email": email,
+            "stake_level": stake_level,
+            "iat": iat,
+            "exp": exp
+        }
+        
+        real_jwt = jwt.encode(jwt_payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+        
+        print(f'[AUTH] 🔐 JWT 已生成: {license_key} (过期时间: {JWT_EXPIRATION_DAYS}天)')
         
         return jsonify({
-            "jwt": fake_jwt,
+            "jwt": real_jwt,
             "user": {
                 "id": 471,
                 "username": username,
