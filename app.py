@@ -478,7 +478,7 @@ def api_auth():
             "license_key": license_key,  # License Key
             "username": username,
             "email": email,
-            "stake_level": NLstake_level,
+            "stake_level": stake_level,
             "iat": iat,
             "exp": exp
         }
