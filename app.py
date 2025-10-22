@@ -478,7 +478,7 @@ def api_auth():
             "license_key": license_key,  # License Key
             "username": username,
             "email": email,
-            "stake_level": stake_level,
+            "stake_level": "NL"+str(stake_level),
             "iat": iat,
             "exp": exp
         }
@@ -501,7 +501,7 @@ def api_auth():
                 "userPlan": "Pro",
                 "nickname": nickname,
                 "is_adat": False,
-                "stakes_level": stake_level,
+                "stakes_level": "NL"+ str(stake_level),
                 "gas": 0,
                 "game_types": ["cash"],
                 "createdAt": "2025-09-28T05:53:16.997Z",
@@ -603,7 +603,7 @@ def users_me():
             "userPlan": "Pro",
             "nickname": username,
             "is_adat": False,
-            "stakes_level": db_stake_level,
+            "stakes_level": "NL"+ str(db_stake_level),
             "gas": 0,
             "game_types": ["cash"],
             "createdAt": "2025-09-28T05:53:16.997Z",
