@@ -459,7 +459,15 @@ def api_auth():
         # ggid 从数据库读取（如果有）
         ggid = result.get('ggid')
         
-        print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid})')
+        # 格式化 expired_at（与其他时间字段格式一致：ISO 8601）
+        expired_at_formatted = None
+        if expiry_date:
+            # 确保时区信息存在
+            if expiry_date.tzinfo is None:
+                expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+            expired_at_formatted = expiry_date.isoformat().replace('+00:00', 'Z')
+        
+        print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid}, Expires: {expired_at_formatted})')
         
         # 生成真实的 JWT
         iat = int(time.time())  # 签发时间
@@ -488,7 +496,7 @@ def api_auth():
                 "provider": "local",
                 "confirmed": True,
                 "blocked": False,
-                "expired_at": None,
+                "expired_at": expired_at_formatted,
                 "plan": "Pro",
                 "userPlan": "Pro",
                 "nickname": nickname,
@@ -573,7 +581,15 @@ def users_me():
         db_stake_level = result.get('stake_level') or 25
         ggid = result.get('ggid')
         
-        print(f'[ME] ✅ JWT 验证成功: {username} (Stake: {db_stake_level}, GGID: {ggid})')
+        # 格式化 expired_at（与其他时间字段格式一致：ISO 8601）
+        expired_at_formatted = None
+        if expiry_date:
+            # 确保时区信息存在
+            if expiry_date.tzinfo is None:
+                expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+            expired_at_formatted = expiry_date.isoformat().replace('+00:00', 'Z')
+        
+        print(f'[ME] ✅ JWT 验证成功: {username} (Stake: {db_stake_level}, GGID: {ggid}, Expires: {expired_at_formatted})')
         
         return jsonify({
             "id": 471,
@@ -582,7 +598,7 @@ def users_me():
             "provider": "local",
             "confirmed": True,
             "blocked": False,
-            "expired_at": None,
+            "expired_at": expired_at_formatted,
             "plan": "Pro",
             "userPlan": "Pro",
             "nickname": username,
