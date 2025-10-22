@@ -1528,6 +1528,14 @@ def migrate_ggid():
 # 真实的 S3 域名
 REAL_S3_DOMAIN = "s3.ggpk.quest"
 
+# 创建一个专用的 requests session，显式禁用代理
+s3_session = requests.Session()
+s3_session.proxies = {
+    'http': None,
+    'https': None,
+}
+s3_session.trust_env = False  # 不从环境变量读取代理设置
+
 @app.route('/v11/<path:file_path>', methods=['GET'])
 def proxy_s3_files(file_path):
     """代理 S3 文件下载 - 从真实链接转发"""
@@ -1538,14 +1546,32 @@ def proxy_s3_files(file_path):
         print(f'[PROXY] 📥 转发下载请求: {file_path}')
         print(f'[PROXY] 🔗 真实 URL: {real_url}')
         
-        # 发起请求到真实的 S3（显式禁用代理，避免递归）
-        s3_response = requests.get(
-            real_url, 
-            stream=True, 
-            timeout=30,
-            proxies={'http': None, 'https': None},  # 禁用代理
-            verify=True  # 保持 SSL 验证
-        )
+        # 临时清除环境变量中的代理设置（避免递归）
+        old_http_proxy = os.environ.pop('HTTP_PROXY', None)
+        old_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+        old_http_proxy_lower = os.environ.pop('http_proxy', None)
+        old_https_proxy_lower = os.environ.pop('https_proxy', None)
+        
+        if any([old_http_proxy, old_https_proxy, old_http_proxy_lower, old_https_proxy_lower]):
+            print(f'[PROXY] 🔧 已清除环境代理: HTTP={old_http_proxy}, HTTPS={old_https_proxy}')
+        
+        try:
+            # 使用专用 session 发起请求（已禁用代理和环境变量）
+            s3_response = s3_session.get(
+                real_url, 
+                stream=True, 
+                timeout=30
+            )
+        finally:
+            # 恢复原始环境变量
+            if old_http_proxy:
+                os.environ['HTTP_PROXY'] = old_http_proxy
+            if old_https_proxy:
+                os.environ['HTTPS_PROXY'] = old_https_proxy
+            if old_http_proxy_lower:
+                os.environ['http_proxy'] = old_http_proxy_lower
+            if old_https_proxy_lower:
+                os.environ['https_proxy'] = old_https_proxy_lower
         
         # 检查响应状态
         if s3_response.status_code != 200:
