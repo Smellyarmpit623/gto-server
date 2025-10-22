@@ -1538,8 +1538,14 @@ def proxy_s3_files(file_path):
         print(f'[PROXY] 📥 转发下载请求: {file_path}')
         print(f'[PROXY] 🔗 真实 URL: {real_url}')
         
-        # 发起请求到真实的 S3
-        s3_response = requests.get(real_url, stream=True, timeout=30)
+        # 发起请求到真实的 S3（显式禁用代理，避免递归）
+        s3_response = requests.get(
+            real_url, 
+            stream=True, 
+            timeout=30,
+            proxies={'http': None, 'https': None},  # 禁用代理
+            verify=True  # 保持 SSL 验证
+        )
         
         # 检查响应状态
         if s3_response.status_code != 200:
