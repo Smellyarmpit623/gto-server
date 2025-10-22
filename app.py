@@ -5,7 +5,7 @@ GTO 服务器 - License Key 系统 + GTO API 模拟 + Socket.IO
 完整版：Dashboard + API + WebSocket
 """
 
-from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session, Response, stream_with_context
+from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
@@ -17,7 +17,6 @@ import hashlib
 import uuid
 import jwt
 import time
-import requests
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'gto-license-super-secret-key-2024-xyz')
@@ -1520,33 +1519,6 @@ def migrate_ggid():
         
     except Exception as e:
         return f'❌ 迁移失败: {str(e)}', 500
-
-# ============================================
-# 文件代理 - 从真实 S3 转发下载
-# ============================================
-
-# 真实的 S3 域名
-REAL_S3_DOMAIN = "s3.ggpk.quest"
-
-# 创建一个专用的 requests session，显式禁用代理
-s3_session = requests.Session()
-s3_session.proxies = {
-    'http': None,
-    'https': None,
-}
-s3_session.trust_env = False  # 不从环境变量读取代理设置
-
-@app.route('/v11/<path:file_path>', methods=['GET'])
-def proxy_s3_files(file_path):
-    """直接重定向到真实 S3 - 最简单的方案，避免递归"""
-    # 构建真实的 S3 URL
-    real_url = f"https://{REAL_S3_DOMAIN}/v11/{file_path}"
-    
-    print(f'[REDIRECT] 🔀 重定向下载请求: {file_path}')
-    print(f'[REDIRECT] 🔗 目标 URL: {real_url}')
-    
-    # 直接返回 302 重定向，让客户端直接从 S3 下载
-    return redirect(real_url, code=302)
 
 # ============================================
 # 启动服务器
