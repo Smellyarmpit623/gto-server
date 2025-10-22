@@ -384,8 +384,8 @@ def api_auth():
     data = request.json or {}
     
     # 获取 License Key 和 HWID
-    license_key = request.headers.get('X-License-Key') or data.get('license_key')
-    hwid = request.headers.get('X-HWID') or data.get('hwid')
+    license_key = request.headers.get('X-License-Key') or data.get('identifier') or data.get('password')
+    hwid = request.headers.get('X-HWID') or data.get('machineId')
     
     # 必须提供 License Key
     if not license_key:
@@ -396,7 +396,7 @@ def api_auth():
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            SELECT hwid, stake_level, ggid, expires_at 
+            SELECT hwid, stake_level, ggid, expiry_date 
             FROM licenses 
             WHERE license_key = %s
         ''', (license_key,))
@@ -409,12 +409,12 @@ def api_auth():
             return jsonify({"error": "Invalid License Key"}), 401
         
         # 检查是否过期
-        if result['expires_at']:
-            expires_at = result['expires_at']
-            # 确保 expires_at 是 offset-aware
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) > expires_at:
+        if result['expiry_date']:
+            expiry_date = result['expiry_date']
+            # 确保 expiry_date 是 offset-aware
+            if expiry_date.tzinfo is None:
+                expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_date:
                 print(f'[AUTH] ❌ License 已过期: {license_key}')
                 return jsonify({"error": "License expired"}), 401
         
