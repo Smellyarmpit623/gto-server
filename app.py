@@ -63,6 +63,7 @@ def init_db():
             expiry_date TIMESTAMP NOT NULL,
             stake_level INTEGER DEFAULT 25,
             max_devices INTEGER DEFAULT 1,
+            plan VARCHAR(20) DEFAULT 'Pro',
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_used TIMESTAMP,
@@ -403,7 +404,7 @@ def api_auth():
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            SELECT hwid, stake_level, ggid, expiry_date 
+            SELECT hwid, stake_level, ggid, expiry_date, plan 
             FROM licenses 
             WHERE license_key = %s
         ''', (license_key,))
@@ -458,6 +459,8 @@ def api_auth():
         stake_level = result.get('stake_level') or 25
         # ggid 从数据库读取（如果有）
         ggid = result.get('ggid')
+        # plan 从数据库读取，默认 Pro
+        plan = result.get('plan') or 'Pro'
         
         # 格式化 expired_at（与其他时间字段格式一致：ISO 8601）
         expired_at_formatted = None
@@ -467,7 +470,7 @@ def api_auth():
                 expiry_date = expiry_date.replace(tzinfo=timezone.utc)
             expired_at_formatted = expiry_date.isoformat().replace('+00:00', 'Z')
         
-        print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid}, Expires: {expired_at_formatted})')
+        print(f'[AUTH] ✅ 登录成功: {username} (Email: {email}, Stake: {stake_level}, GGID: {ggid}, Plan: {plan}, Expires: {expired_at_formatted})')
         
         # 生成真实的 JWT
         iat = int(time.time())  # 签发时间
@@ -497,8 +500,8 @@ def api_auth():
                 "confirmed": True,
                 "blocked": False,
                 "expired_at": expired_at_formatted,
-                "plan": "Pro",
-                "userPlan": "Pro",
+                "plan": plan,
+                "userPlan": plan,
                 "nickname": nickname,
                 "is_adat": False,
                 "stakes_level": stake_level,
@@ -511,7 +514,7 @@ def api_auth():
                 "enable_recording": False,
                 "settlement": "day",
                 "minutes": 0,
-                "isPro": True
+                "isPro": plan == "Pro"
             }
         }), 200
         
@@ -550,7 +553,7 @@ def users_me():
         db = get_db()
         cursor = db.cursor()
         cursor.execute('''
-            SELECT hwid, stake_level, ggid, expiry_date, is_active
+            SELECT hwid, stake_level, ggid, expiry_date, is_active, plan
             FROM licenses 
             WHERE license_key = %s
         ''', (license_key,))
@@ -576,9 +579,10 @@ def users_me():
                 print(f'[ME] ❌ License 已过期: {license_key}')
                 return jsonify({"error": "License expired"}), 401
         
-        # 使用数据库中最新的 stake_level 和 ggid
+        # 使用数据库中最新的 stake_level、ggid 和 plan
         db_stake_level = result.get('stake_level') or 25
         ggid = result.get('ggid')
+        plan = result.get('plan') or 'Pro'
         
         # 格式化 expired_at（与其他时间字段格式一致：ISO 8601）
         expired_at_formatted = None
@@ -588,7 +592,7 @@ def users_me():
                 expiry_date = expiry_date.replace(tzinfo=timezone.utc)
             expired_at_formatted = expiry_date.isoformat().replace('+00:00', 'Z')
         
-        print(f'[ME] ✅ JWT 验证成功: {username} (Stake: {db_stake_level}, GGID: {ggid}, Expires: {expired_at_formatted})')
+        print(f'[ME] ✅ JWT 验证成功: {username} (Stake: {db_stake_level}, GGID: {ggid}, Plan: {plan}, Expires: {expired_at_formatted})')
         
         return jsonify({
             "id": 471,
@@ -598,13 +602,13 @@ def users_me():
             "confirmed": True,
             "blocked": False,
             "expired_at": expired_at_formatted,
-            "plan": "Pro",
-            "userPlan": "Pro",
+            "plan": plan,
+            "userPlan": plan,
             "nickname": username,
             "is_adat": False,
             "stakes_level": db_stake_level,
             "gas": 0,
-            "game_types": ["cash"],
+            "game_types": ["cash"]
             "createdAt": "2025-09-28T05:53:16.997Z",
             "updatedAt": "2025-10-20T06:44:16.129Z",
             "max_devices": None,
@@ -612,7 +616,7 @@ def users_me():
             "enable_recording": False,
             "settlement": "day",
             "minutes": 0,
-            "isPro": True
+            "isPro": plan == "Pro"
         }), 200
         
     except jwt.ExpiredSignatureError:
@@ -901,6 +905,20 @@ DASHBOARD_HTML = '''
             color: #e74c3c;
             font-weight: 600;
         }
+        .plan-pro {
+            color: #667eea;
+            font-weight: 600;
+            background: #e8f2ff;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .plan-premium {
+            color: #f39c12;
+            font-weight: 600;
+            background: #fef5e7;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
         .action-buttons {
             display: flex;
             gap: 10px;
@@ -1007,6 +1025,7 @@ DASHBOARD_HTML = '''
                 <thead>
                     <tr>
                             <th>License Key</th>
+                            <th>计划</th>
                             <th>HWID</th>
                         <th>到期时间</th>
                             <th>Stake Level</th>
@@ -1019,6 +1038,7 @@ DASHBOARD_HTML = '''
                         {% for lic in licenses %}
                         <tr>
                             <td><code>{{ lic.license_key }}</code></td>
+                            <td><span class="plan-{{ lic.plan.lower() }}">{{ lic.plan }}</span></td>
                             <td><small>{{ lic.hwid[:20] if lic.hwid else '未绑定' }}</small></td>
                             <td>{{ lic.expiry_date.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td>{{ lic.stake_level }}</td>
@@ -1060,6 +1080,13 @@ DASHBOARD_HTML = '''
                         <div class="form-group">
                             <label>有效期（天）</label>
                             <input type="number" name="days" value="30" required>
+                        </div>
+                        <div class="form-group">
+                            <label>计划类型</label>
+                            <select name="plan" required>
+                                <option value="Pro">Pro</option>
+                                <option value="Premium">Premium</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>Stake Level</label>
@@ -1352,6 +1379,7 @@ def create_license():
     
     try:
         days = int(request.form.get('days', 30))
+        plan = request.form.get('plan', 'Pro').strip()
         stake_level = int(request.form.get('stake_level', 25))
         max_devices = int(request.form.get('max_devices', 1))
         email = request.form.get('email', '').strip()
@@ -1366,14 +1394,14 @@ def create_license():
         cursor = db.cursor()
         
         cursor.execute('''
-            INSERT INTO licenses (license_key, expiry_date, stake_level, max_devices, email, ggid, notes)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (license_key, expiry_date, stake_level, max_devices, email or None, ggid or None, notes or None))
+            INSERT INTO licenses (license_key, expiry_date, plan, stake_level, max_devices, email, ggid, notes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ''', (license_key, expiry_date, plan, stake_level, max_devices, email or None, ggid or None, notes or None))
         
         db.commit()
         db.close()
         
-        log_action('创建 License', license_key, f'有效期: {days}天, Stake: {stake_level}')
+        log_action('创建 License', license_key, f'有效期: {days}天, 计划: {plan}, Stake: {stake_level}')
         
         session['message'] = f'✅ License 创建成功！Key: {license_key}'
         session['message_type'] = 'success'
@@ -1516,6 +1544,34 @@ def migrate_ggid():
         else:
             db.close()
             return '⚠️  GGID 字段已存在', 200
+        
+    except Exception as e:
+        return f'❌ 迁移失败: {str(e)}', 500
+
+@app.route('/migrate-plan')
+def migrate_plan():
+    """迁移：添加 plan 字段"""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # 检查列是否存在
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='licenses' AND column_name='plan'
+        """)
+        
+        if not cursor.fetchone():
+            cursor.execute('ALTER TABLE licenses ADD COLUMN plan VARCHAR(20) DEFAULT \'Pro\'')
+            # 更新现有记录为 Pro
+            cursor.execute("UPDATE licenses SET plan = 'Pro' WHERE plan IS NULL")
+            db.commit()
+            db.close()
+            return '✅ Plan 字段添加成功！所有现有 License 已设置为 Pro', 200
+        else:
+            db.close()
+            return '⚠️  Plan 字段已存在', 200
         
     except Exception as e:
         return f'❌ 迁移失败: {str(e)}', 500
