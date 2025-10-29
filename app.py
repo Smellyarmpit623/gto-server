@@ -1207,16 +1207,6 @@ PRICING_HTML = '''
     <nav class="navbar">
         <div class="nav-container">
             <div class="logo">TYGTO</div>
-            <ul class="nav-links">
-                <li><a href="#pricing">计划与定价</a></li>
-                <li><a href="#download">下载</a></li>
-                <li><a href="#community">加入社区</a></li>
-                <li><a href="#contact">联系销售</a></li>
-            </ul>
-            <div class="nav-buttons">
-                <a href="#pricing" class="btn btn-outline">计划与定价</a>
-                <a href="#contact" class="btn btn-primary">联系销售</a>
-            </div>
         </div>
     </nav>
 
@@ -1229,8 +1219,8 @@ PRICING_HTML = '''
                 <h1>用终极扑克 RTA 统治扑克桌</h1>
                 <h2>通过先进的扑克策略和实时 AI 分析解锁您的获胜潜力，统治每一手牌</h2>
                 <div class="hero-buttons">
-                    <a href="#pricing" class="btn btn-primary">计划与定价</a>
-                    <a href="#download" class="btn btn-outline">立即下载</a>
+                    <button class="btn btn-outline" onclick="copyWechat()">微信: GGteam6</button>
+                    <a href="https://t.me/samhyde22" class="btn btn-primary" target="_blank">Telegram</a>
                 </div>
             </div>
         </section>
@@ -1299,48 +1289,6 @@ PRICING_HTML = '''
             </div>
         </section>
 
-        <!-- 定价区域 -->
-        <section class="pricing" id="pricing">
-            <div class="pricing-container">
-                <h2 class="section-title">计划与定价</h2>
-                <p class="section-subtitle">升级到商业计划以解锁高级功能并获得技术支持</p>
-                
-                <div class="pricing-cards">
-                    <div class="pricing-card pro">
-                        <h3 class="pricing-name">Pro 计划</h3>
-                        <div class="pricing-price">¥300</div>
-                        <div class="pricing-period">预付费套餐</div>
-                        <ul class="pricing-features">
-                            <li><span class="feature-check">✓</span> 专为 NL50 玩家设计</li>
-                            <li><span class="feature-check">✓</span> 完整 GTO 策略 (100BB)</li>
-                            <li><span class="feature-check">✓</span> 完整 GTO 策略 (200BB)</li>
-                            <li><span class="feature-check">✓</span> 多人底池策略</li>
-                            <li><span class="feature-check">✓</span> 动态 EV 和权益</li>
-                            <li><span class="feature-check">✓</span> 限制在 NL50 及以下</li>
-                        </ul>
-                        <button class="pricing-button" onclick="contactSupport('Pro 计划')">购买 ¥300 套餐</button>
-                    </div>
-
-                    <div class="pricing-card premium">
-                        <h3 class="pricing-name">Premium 计划</h3>
-                        <div class="pricing-price">¥500</div>
-                        <div class="pricing-period">预付费套餐</div>
-                        <ul class="pricing-features">
-                            <li><span class="feature-check">✓</span> 包含 Pro 所有功能</li>
-                            <li><span class="feature-check">✓</span> 无限制级别</li>
-                            <li><span class="feature-check">✓</span> 对手手牌读取</li>
-                            <li><span class="feature-check">✓</span> 可切换翻牌前策略</li>
-                            <li><span class="feature-check">✓</span> 最先进的功能</li>
-                        </ul>
-                        <button class="pricing-button" onclick="contactSupport('Premium 计划')">购买 ¥500 套餐</button>
-                    </div>
-                </div>
-                
-                <p style="text-align: center; color: #666; margin-top: 30px;">
-                    预付费时间套餐，按分钟计费，无过期日期。
-                </p>
-            </div>
-        </section>
 
         <!-- FAQ 区域 -->
         <section class="faq">
@@ -1457,16 +1405,13 @@ PRICING_HTML = '''
             }
         }
         
-        function contactSupport(plan) {
-            const message = `我想购买 ${plan}，请提供更多信息。`;
-            const telegramUrl = `https://t.me/tygto_support?text=${encodeURIComponent(message)}`;
-            const wechatUrl = `weixin://dl/chat?tygto_support&text=${encodeURIComponent(message)}`;
-            
-            if (confirm('选择联系方式：\\n\\n确定 - Telegram\\n取消 - 微信')) {
-                window.open(telegramUrl, '_blank');
-            } else {
-                window.open(wechatUrl, '_blank');
-            }
+        function copyWechat() {
+            navigator.clipboard.writeText('GGteam6').then(function() {
+                alert('微信账号已复制到剪贴板: GGteam6');
+            }).catch(function(err) {
+                // 如果复制失败，显示提示
+                alert('微信账号: GGteam6');
+            });
         }
         
         // 平滑滚动
