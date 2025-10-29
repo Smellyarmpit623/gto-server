@@ -608,7 +608,7 @@ def users_me():
             "is_adat": False,
             "stakes_level": db_stake_level,
             "gas": 0,
-            "game_types": ["cash"]
+            "game_types": ["cash"],
             "createdAt": "2025-09-28T05:53:16.997Z",
             "updatedAt": "2025-10-20T06:44:16.129Z",
             "max_devices": None,
