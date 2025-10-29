@@ -751,6 +751,549 @@ def home_disconnect():
 # Dashboard - 管理界面
 # ============================================
 
+PRICING_HTML = '''
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TYGTO - 计划与定价</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #667eea;
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+        .header p {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+        .contact-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .contact-info h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .contact-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        .contact-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            transition: all 0.3s;
+        }
+        .contact-link:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .pricing-section {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        .pricing-title {
+            text-align: center;
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 40px;
+        }
+        .pricing-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: #f8f9fa;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .tab:hover {
+            background: #e8e9eb;
+        }
+        .tab.active:hover {
+            background: #5568d3;
+        }
+        .plans {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        .plan-card {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+        .plan-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        }
+        .plan-card.pro {
+            border: 3px solid #667eea;
+        }
+        .plan-card.premium {
+            border: 3px solid #f39c12;
+            background: linear-gradient(135deg, #fef5e7 0%, #f8f9fa 100%);
+        }
+        .plan-name {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .plan-card.pro .plan-name {
+            color: #667eea;
+        }
+        .plan-card.premium .plan-name {
+            color: #f39c12;
+        }
+        .plan-price {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .plan-period {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .plan-features {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+        .plan-features li {
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .plan-features li:last-child {
+            border-bottom: none;
+        }
+        .feature-check {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .feature-cross {
+            color: #e74c3c;
+        }
+        .buy-button {
+            width: 100%;
+            padding: 15px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .plan-card.premium .buy-button {
+            background: #f39c12;
+        }
+        .buy-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .comparison-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        .comparison-table .feature-name {
+            font-weight: 500;
+        }
+        .comparison-table .check {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .comparison-table .cross {
+            color: #e74c3c;
+        }
+        .faq-section {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .faq-title {
+            text-align: center;
+            font-size: 2em;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .faq-item {
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .faq-question {
+            background: #f8f9fa;
+            padding: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .faq-question:hover {
+            background: #e8e9eb;
+        }
+        .faq-answer {
+            padding: 20px;
+            background: white;
+            display: none;
+        }
+        .faq-answer.show {
+            display: block;
+        }
+        .admin-link {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .admin-link:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <a href="/admin" class="admin-link">管理后台</a>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🎮 TYGTO</h1>
+            <p>升级到商业计划以解锁高级功能并获得技术支持</p>
+            
+            <div class="contact-info">
+                <h3>📞 客户服务</h3>
+                <div class="contact-links">
+                    <a href="https://t.me/tygto_support" class="contact-link">
+                        <span>📱</span>
+                        <span>Telegram 客服</span>
+                    </a>
+                    <a href="weixin://dl/chat?tygto_support" class="contact-link">
+                        <span>💬</span>
+                        <span>微信客服</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="pricing-section">
+            <h2 class="pricing-title">计划与定价</h2>
+            
+            <div class="pricing-tabs">
+                <button class="tab active" onclick="switchTab('prepaid')">预付费套餐</button>
+                <button class="tab" onclick="switchTab('hourly')">按小时计费</button>
+            </div>
+
+            <div id="prepaid" class="tab-content">
+                <div class="plans">
+                    <div class="plan-card pro">
+                        <div class="plan-name">Pro 计划</div>
+                        <div class="plan-price">¥300</div>
+                        <div class="plan-period">预付费套餐</div>
+                        <ul class="plan-features">
+                            <li><span class="feature-check">✓</span> 专为 NL50 玩家设计</li>
+                            <li><span class="feature-check">✓</span> 完整 GTO 策略 (100BB)</li>
+                            <li><span class="feature-check">✓</span> 完整 GTO 策略 (200BB)</li>
+                            <li><span class="feature-check">✓</span> 多人底池策略</li>
+                            <li><span class="feature-check">✓</span> 动态 EV 和权益</li>
+                            <li><span class="feature-check">✓</span> 限制在 NL50 及以下</li>
+                        </ul>
+                        <button class="buy-button" onclick="contactSupport('Pro 计划')">购买 ¥300 套餐</button>
+                    </div>
+
+                    <div class="plan-card premium">
+                        <div class="plan-name">Premium 计划</div>
+                        <div class="plan-price">¥500</div>
+                        <div class="plan-period">预付费套餐</div>
+                        <ul class="plan-features">
+                            <li><span class="feature-check">✓</span> 包含 Pro 所有功能</li>
+                            <li><span class="feature-check">✓</span> 无限制级别</li>
+                            <li><span class="feature-check">✓</span> 对手手牌读取</li>
+                            <li><span class="feature-check">✓</span> 可切换翻牌前策略</li>
+                            <li><span class="feature-check">✓</span> 最先进的功能</li>
+                        </ul>
+                        <button class="buy-button" onclick="contactSupport('Premium 计划')">购买 ¥500 套餐</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="hourly" class="tab-content" style="display: none;">
+                <div class="plans">
+                    <div class="plan-card pro">
+                        <div class="plan-name">Pro 计划</div>
+                        <div class="plan-price">¥6</div>
+                        <div class="plan-period">每小时</div>
+                        <ul class="plan-features">
+                            <li><span class="feature-check">✓</span> 50小时 - 原价</li>
+                            <li><span class="feature-check">✓</span> 100小时 - 16% 折扣</li>
+                            <li><span class="feature-check">✓</span> 200小时 - 32% 折扣</li>
+                            <li><span class="feature-check">✓</span> 专为 NL50 玩家设计</li>
+                        </ul>
+                        <button class="buy-button" onclick="contactSupport('Pro 按小时计费')">联系购买</button>
+                    </div>
+
+                    <div class="plan-card premium">
+                        <div class="plan-name">Premium 计划</div>
+                        <div class="plan-price">¥10</div>
+                        <div class="plan-period">每小时</div>
+                        <ul class="plan-features">
+                            <li><span class="feature-check">✓</span> 50小时 - 原价</li>
+                            <li><span class="feature-check">✓</span> 100小时 - 16% 折扣</li>
+                            <li><span class="feature-check">✓</span> 200小时 - 32% 折扣</li>
+                            <li><span class="feature-check">✓</span> 最先进的功能</li>
+                        </ul>
+                        <button class="buy-button" onclick="contactSupport('Premium 按小时计费')">联系购买</button>
+                    </div>
+                </div>
+            </div>
+
+            <p style="text-align: center; color: #666; margin-top: 20px;">
+                预付费时间套餐，按分钟计费，无过期日期。
+            </p>
+        </div>
+
+        <div class="pricing-section">
+            <h2 class="pricing-title">功能对比</h2>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>功能</th>
+                        <th>Pro</th>
+                        <th>Premium</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="feature-name">级别限制</td>
+                        <td class="check">NL50 及以下</td>
+                        <td class="check">无限制</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">完整 GTO 策略 (100BB)</td>
+                        <td class="check">✓</td>
+                        <td class="check">✓</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">完整 GTO 策略 (200BB)</td>
+                        <td class="check">✓</td>
+                        <td class="check">✓</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">多人底池策略</td>
+                        <td class="check">✓</td>
+                        <td class="check">✓</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">动态 EV 和权益</td>
+                        <td class="check">✓</td>
+                        <td class="check">✓</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">对手手牌读取</td>
+                        <td class="cross">-</td>
+                        <td class="check">✓</td>
+                    </tr>
+                    <tr>
+                        <td class="feature-name">可切换翻牌前策略</td>
+                        <td class="cross">-</td>
+                        <td class="check">✓</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="faq-section">
+            <h2 class="faq-title">常见问题</h2>
+            
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    TYGTO 兼容哪些扑克网站或平台？
+                </div>
+                <div class="faq-answer">
+                    GGPoker 和所有 GG 网络皮肤，如 Natural8、7XL Poker、Olybet Poker、WSOP.CA、GGPuke 等。仅支持 6max 游戏。如果您对其他平台有需求，请联系我们。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    系统要求是什么？（4-6 桌）
+                </div>
+                <div class="faq-answer">
+                    <strong>Windows 平台：</strong>Windows 11 是必需的。如果您打算同时玩 4-6 桌，建议使用 NVIDIA GTX 2060 Super 6GB 或更高 GPU。此外，需要最低 2K 分辨率的显示器。如果您没有 NVIDIA GPU，需要 Intel i7-13700KF 或 AMD 7900X 或更高处理器来支持四桌游戏。<br><br>
+                    <strong>macOS 平台：</strong>不支持 Intel 芯片的 Mac 设备。要同时玩 4-6 桌，需要配备至少 M4 或 M3 Pro 芯片的 Mac。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    TYGTO 有防检测功能吗？
+                </div>
+                <div class="faq-answer">
+                    该软件采用最先进的防检测功能，目前未被扑克平台检测到。但是，没有软件可以保证完全免疫扑克网站安全措施的检测。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    TYGTO 容易设置和使用吗？
+                </div>
+                <div class="faq-answer">
+                    足够简单，可以自行安装。对于 Windows 系统，需要一些额外的安全设置，但按照文档说明可以快速完成安装。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    我可以试用吗？有特别优惠吗？
+                </div>
+                <div class="faq-answer">
+                    为了更好地服务客户，我们目前不提供试用。但是，您可以联系我们获得特别优惠。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    我可以在多少台电脑上使用许可证？
+                </div>
+                <div class="faq-answer">
+                    仅限单设备使用。如果您需要切换设备，请联系我们。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    软件更新包含在内吗？多久更新一次？
+                </div>
+                <div class="faq-answer">
+                    是的，更新包含在内。定期每月更新包括策略增强和错误修复。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    TYGTO 能保证我在扑克中获胜吗？
+                </div>
+                <div class="faq-answer">
+                    我们无法保证短期盈利，因为扑克具有短期波动性。但是，通过纪律性游戏可以实现统计上可预测的长期回报。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    使用 TYGTO 最多可以同时打开多少桌？
+                </div>
+                <div class="faq-answer">
+                    TYGTO 最多支持同时 6 桌。所有桌子的性能保持一致。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabName) {
+            // 隐藏所有内容
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            
+            // 显示选中的
+            document.getElementById(tabName).style.display = 'block';
+            event.target.classList.add('active');
+        }
+        
+        function toggleFaq(element) {
+            const answer = element.nextElementSibling;
+            const isOpen = answer.classList.contains('show');
+            
+            // 关闭所有其他 FAQ
+            document.querySelectorAll('.faq-answer').forEach(el => el.classList.remove('show'));
+            
+            // 切换当前 FAQ
+            if (!isOpen) {
+                answer.classList.add('show');
+            }
+        }
+        
+        function contactSupport(plan) {
+            const message = `我想购买 ${plan}，请提供更多信息。`;
+            const telegramUrl = `https://t.me/tygto_support?text=${encodeURIComponent(message)}`;
+            const wechatUrl = `weixin://dl/chat?tygto_support&text=${encodeURIComponent(message)}`;
+            
+            if (confirm('选择联系方式：\n\n确定 - Telegram\n取消 - 微信')) {
+                window.open(telegramUrl, '_blank');
+            } else {
+                window.open(wechatUrl, '_blank');
+            }
+        }
+    </script>
+</body>
+</html>
+'''
+
 DASHBOARD_HTML = '''
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -1260,7 +1803,12 @@ LOGIN_HTML = '''
 
 @app.route('/')
 def index():
-    """首页 - Dashboard"""
+    """首页 - 定价页面"""
+    return render_template_string(PRICING_HTML)
+
+@app.route('/admin')
+def admin_dashboard():
+    """管理后台 - Dashboard"""
     if 'admin' not in session:
         return redirect(url_for('login'))
     
@@ -1360,7 +1908,7 @@ def login():
         password = request.form.get('password')
         if password == ADMIN_PASSWORD:
             session['admin'] = True
-            return redirect(url_for('index'))
+            return redirect(url_for('admin_dashboard'))
         else:
             return render_template_string(LOGIN_HTML, error='密码错误')
     return render_template_string(LOGIN_HTML)
