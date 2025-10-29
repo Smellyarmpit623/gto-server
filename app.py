@@ -2139,8 +2139,8 @@ def create_license():
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (license_key, expiry_date, plan, stake_level, max_devices, email or None, ggid or None, notes or None))
         
-                db.commit()
-                db.close()
+        db.commit()
+        db.close()
         
         log_action('创建 License', license_key, f'有效期: {days}天, 计划: {plan}, Stake: {stake_level}')
         
@@ -2279,8 +2279,8 @@ def migrate_ggid():
         
         if not cursor.fetchone():
             cursor.execute('ALTER TABLE licenses ADD COLUMN ggid VARCHAR(100)')
-        db.commit()
-        db.close()
+            db.commit()
+            db.close()
             return '✅ GGID 字段添加成功！', 200
         else:
             db.close()
@@ -2307,8 +2307,8 @@ def migrate_plan():
             cursor.execute('ALTER TABLE licenses ADD COLUMN plan VARCHAR(20) DEFAULT \'Pro\'')
             # 更新现有记录为 Pro
             cursor.execute("UPDATE licenses SET plan = 'Pro' WHERE plan IS NULL")
-        db.commit()
-        db.close()
+            db.commit()
+            db.close()
             return '✅ Plan 字段添加成功！所有现有 License 已设置为 Pro', 200
         else:
             db.close()
