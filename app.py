@@ -766,49 +766,6 @@ PRICING_HTML = '''
             color: #333;
         }
         
-        /* 导航栏 */
-        .navbar {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-            padding: 15px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
-        }
-        .nav-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .logo {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #667eea;
-        }
-        .nav-links {
-            display: flex;
-            gap: 30px;
-            list-style: none;
-        }
-        .nav-links a {
-            text-decoration: none;
-            color: #333;
-            font-weight: 500;
-            transition: color 0.3s;
-        }
-        .nav-links a:hover {
-            color: #667eea;
-        }
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
         .btn {
             padding: 10px 20px;
             border-radius: 25px;
@@ -838,7 +795,7 @@ PRICING_HTML = '''
         
         /* 主要内容 */
         .main-content {
-            margin-top: 80px;
+            margin-top: 0;
         }
         
         /* 英雄区域 */
@@ -1158,24 +1115,6 @@ PRICING_HTML = '''
             opacity: 1;
         }
         
-        /* 管理后台链接 */
-        .admin-link {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #667eea;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s;
-            z-index: 1001;
-        }
-        .admin-link:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-        }
         
         /* 响应式设计 */
         @media (max-width: 768px) {
@@ -1201,14 +1140,6 @@ PRICING_HTML = '''
     </style>
 </head>
 <body>
-    <a href="/admin" class="admin-link">管理后台</a>
-    
-    <!-- 导航栏 -->
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="logo">TYGTO</div>
-        </div>
-    </nav>
 
     <!-- 主要内容 -->
     <main class="main-content">
