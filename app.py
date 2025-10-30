@@ -907,6 +907,19 @@ PRICING_HTML = '''
             margin: 0 auto;
             padding: 0 20px;
         }
+        .examples-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .example-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .example-card img { width: 100%; display: block; }
         .section-title {
             text-align: center;
             font-size: 2.5em;
@@ -1151,7 +1164,7 @@ PRICING_HTML = '''
                 <h2>通过先进的扑克策略和实时 AI 分析解锁您的获胜潜力，统治每一手牌</h2>
                 <div class="hero-buttons">
                     <button class="btn btn-outline" onclick="copyWechat()">微信: GGteam6</button>
-                    <a href="https://t.me/samhyde22" class="btn btn-primary" target="_blank">Telegram</a>
+                    <a href="https://t.me/horseking6670" class="btn btn-primary" target="_blank">Telegram</a>
                 </div>
             </div>
         </section>
@@ -1219,6 +1232,23 @@ PRICING_HTML = '''
                 </div>
             </div>
         </section>
+
+        <!-- 用户成功案例 -->
+        {% if examples %}
+        <section class="features" id="examples">
+            <div class="features-container">
+                <h2 class="section-title">用户成功案例</h2>
+                <p class="section-subtitle">来自用户提交的真实战绩与反馈（部分截图）</p>
+                <div class="examples-grid">
+                    {% for img in examples %}
+                    <div class="example-card">
+                        <img src="{{ img }}" alt="example">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
 
 
         <!-- FAQ 区域 -->
@@ -1641,7 +1671,7 @@ DASHBOARD_HTML = '''
                             <th>HWID</th>
                         <th>到期时间</th>
                             <th>Stake Level</th>
-                            <th>最后使用</th>
+                            <th>GGID</th>
                         <th>状态</th>
                         <th>操作</th>
                     </tr>
@@ -1654,7 +1684,7 @@ DASHBOARD_HTML = '''
                             <td><small>{{ lic.hwid[:20] if lic.hwid else '未绑定' }}</small></td>
                             <td>{{ lic.expiry_date.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td>{{ lic.stake_level }}</td>
-                            <td>{{ lic.last_used.strftime('%Y-%m-%d %H:%M') if lic.last_used else '从未使用' }}</td>
+                            <td>{{ lic.ggid if lic.ggid else '未设置' }}</td>
                             <td>
                                 {% if lic.is_active and lic.expiry_date > now %}
                                 <span class="status-active">✅ 激活</span>
@@ -1870,10 +1900,29 @@ LOGIN_HTML = '''
 </html>
 '''
 
+from flask import send_from_directory
+import os
+
+@app.route('/resource/<path:filename>')
+def resource_file(filename):
+    base_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resource')
+    return send_from_directory(base_path, filename)
+
 @app.route('/')
 def index():
-    """首页 - 定价页面"""
-    return render_template_string(PRICING_HTML)
+    """首页 - 定价页面（含用户成功案例展示）"""
+    # Collect example images from ./resource folder
+    resource_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resource')
+    examples = []
+    try:
+        if os.path.isdir(resource_dir):
+            for name in sorted(os.listdir(resource_dir)):
+                lower = name.lower()
+                if lower.endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif')):
+                    examples.append(f'/resource/{name}')
+    except Exception:
+        pass
+    return render_template_string(PRICING_HTML, examples=examples)
 
 @app.route('/admin')
 def admin_dashboard():
@@ -2027,7 +2076,7 @@ def create_license():
         session['message'] = f'❌ 创建失败: {str(e)}'
         session['message_type'] = 'error'
     
-    return redirect(url_for('index'))
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/extend', methods=['POST'])
 def extend_license():
@@ -2059,7 +2108,7 @@ def extend_license():
         session['message'] = f'❌ 延长失败: {str(e)}'
         session['message_type'] = 'error'
     
-    return redirect(url_for('index'))
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/reset-hwid', methods=['POST'])
 def reset_hwid():
@@ -2091,7 +2140,7 @@ def reset_hwid():
         session['message'] = f'❌ 重置失败: {str(e)}'
         session['message_type'] = 'error'
     
-    return redirect(url_for('index'))
+    return redirect(url_for('admin_dashboard'))
 
 @app.route('/delete', methods=['POST'])
 def delete_license():
