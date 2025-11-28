@@ -252,7 +252,7 @@ def api_versions():
         return jsonify({}), 200
     
     return jsonify({
-         "data": [
+        "data": [
     {
       "id": 49,
       "attributes": {
@@ -260,14 +260,14 @@ def api_versions():
         "core_version": "135.2.1",
         "core_url": "https://s3.ggpk.quest/v11/ace/135.2.1/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
-        "changelog": null,
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog": None,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-09-16T02:51:08.936Z",
         "updatedAt": "2025-10-26T10:28:58.969Z",
         "type": "tygto",
-        "published": null,
-        "is_minimum_version": null
+        "published": None,
+        "is_minimum_version": None
       }
     },
     {
@@ -277,14 +277,14 @@ def api_versions():
         "core_version": "135.2.1",
         "core_url": "https://s3.ggpk.quest/v11/ace/135.2.1/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/2.0.7/res.zip",
-        "changelog": null,
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog": None,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-07-22T05:26:39.447Z",
         "updatedAt": "2025-10-28T03:16:00.641Z",
         "type": "tygto",
-        "published": null,
-        "is_minimum_version": null
+        "published": None,
+        "is_minimum_version": None
       }
     },
     {
@@ -294,14 +294,14 @@ def api_versions():
         "core_version": "10.2.0",
         "core_url": "https://s3.ggpk.quest/v11/ace/10.2.0/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
-        "changelog": null,
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog": None,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-09-18T09:30:02.242Z",
         "updatedAt": "2025-11-25T07:29:13.235Z",
         "type": "tygto",
-        "published": null,
-        "is_minimum_version": null
+        "published": None,
+        "is_minimum_version": None
       }
     },
     {
@@ -312,13 +312,13 @@ def api_versions():
         "core_url": "https://s3.ggpk.quest/v11/ace/10.2.1/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
         "changelog": " Improved anti-ban tech on this update",
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-11-20T15:32:23.772Z",
         "updatedAt": "2025-11-26T05:45:05.034Z",
         "type": "tygto",
-        "published": true,
-        "is_minimum_version": false
+        "published": True,
+        "is_minimum_version": False
       }
     },
     {
@@ -329,13 +329,13 @@ def api_versions():
         "core_url": "https://s3.ggpk.quest/v11/ace/10.2.1/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
         "changelog": "1.Preflop strategies now support stack depth matching with new depth options: 50BB, 60BB, 70BB, 80BB, 150BB, and 200BB\n2.Fixed position recognition error in NLH mode",
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-09-22T09:34:43.607Z",
         "updatedAt": "2025-11-26T05:45:12.256Z",
         "type": "tygto",
-        "published": true,
-        "is_minimum_version": null
+        "published": True,
+        "is_minimum_version": None
       }
     },
     {
@@ -345,14 +345,14 @@ def api_versions():
         "core_version": "8.6.29",
         "core_url": "https://s3.ggpk.quest/v11/ace/8.6.29/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/8.0.0/res.zip",
-        "changelog": null,
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog": None,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-02-10T16:38:39.524Z",
         "updatedAt": "2025-10-04T17:51:31.265Z",
         "type": "nutsgto",
-        "published": true,
-        "is_minimum_version": null
+        "published": True,
+        "is_minimum_version": None
       }
     },
     {
@@ -363,13 +363,13 @@ def api_versions():
         "core_url": "https://s3.ggpk.quest/v11/ace/10.0.14/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
         "changelog": "This version introduces 8 built-in GTOWizard preflop strategies that automatically adapt to opponents' opening sizes. TYGTO now automatically selects the appropriate preflop range based on your opponent's open sizing.",
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-08-03T12:46:49.490Z",
         "updatedAt": "2025-08-07T06:13:00.829Z",
         "type": "tygto",
-        "published": true,
-        "is_minimum_version": null
+        "published": True,
+        "is_minimum_version": None
       }
     },
     {
@@ -380,13 +380,13 @@ def api_versions():
         "core_url": "https://s3.ggpk.quest/v11/ace/10.0.14/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
         "changelog": "Added Simplified Chinese and Traditional Chinese language support",
-        "changelog_cn": null,
-        "spingo_url": null,
+        "changelog_cn": None,
+        "spingo_url": None,
         "createdAt": "2025-09-15T11:57:38.965Z",
         "updatedAt": "2025-09-15T11:57:38.965Z",
         "type": "tygto",
-        "published": true,
-        "is_minimum_version": null
+        "published": True,
+        "is_minimum_version": None
       }
     }
   ],
@@ -395,7 +395,7 @@ def api_versions():
                 "page": 1,
                 "pageSize": 25,
                 "pageCount": 1,
-                "total": 7
+                "total": 8
             }
         }
     }), 200
