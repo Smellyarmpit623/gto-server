@@ -258,7 +258,7 @@ def api_versions():
       "attributes": {
         "gui_version": "135.3.0",
         "core_version": "135.2.1",
-        "core_url": "https://s3.ggpk.quest/v11/ace/135.2.1/chrome.zip",
+        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.0/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.0.0/res.zip",
         "changelog": None,
         "changelog_cn": None,
@@ -275,7 +275,7 @@ def api_versions():
       "attributes": {
         "gui_version": "135.0.0",
         "core_version": "135.2.1",
-        "core_url": "https://s3.ggpk.quest/v11/ace/135.2.1/chrome.zip",
+        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.0/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/2.0.7/res.zip",
         "changelog": None,
         "changelog_cn": None,
@@ -309,7 +309,7 @@ def api_versions():
       "attributes": {
         "gui_version": "137.5.1",
         "core_version": "10.2.1",
-        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.1/chrome.zip",
+        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.0/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
         "changelog": " Improved anti-ban tech on this update",
         "changelog_cn": None,
@@ -326,7 +326,7 @@ def api_versions():
       "attributes": {
         "gui_version": "137.5.0",
         "core_version": "10.2.1",
-        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.1/chrome.zip",
+        "core_url": "https://s3.ggpk.quest/v11/ace/10.2.0/chrome.zip",
         "res_url": "https://s3.ggpk.quest/v11/res/3.1.0/res.zip",
         "changelog": "1.Preflop strategies now support stack depth matching with new depth options: 50BB, 60BB, 70BB, 80BB, 150BB, and 200BB\n2.Fixed position recognition error in NLH mode",
         "changelog_cn": None,
